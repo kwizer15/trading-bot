@@ -9,13 +9,14 @@ class DataLoader {
 
     /**
      * Télécharge des données historiques depuis Binance
+     * Version améliorée pour gérer de plus grandes périodes
      */
     public function downloadHistoricalData($symbol, $interval = '1h', $startTime = null, $endTime = null) {
         $klines = [];
         $limit = 1000; // Nombre maximum de klines par requête
 
         if (!$startTime) {
-            $startTime = strtotime('-1 month') * 1000; // Par défaut : 1 mois
+            $startTime = strtotime('-1 year') * 1000; // Par défaut : 1 an
         } elseif (is_string($startTime)) {
             $startTime = strtotime($startTime) * 1000;
         }
@@ -26,36 +27,53 @@ class DataLoader {
             $endTime = strtotime($endTime) * 1000;
         }
 
+        // Logging pour debug
+        echo "Téléchargement des données de " . date('Y-m-d', $startTime/1000) . " à " . date('Y-m-d', $endTime/1000) . "\n";
+
         $currentStartTime = $startTime;
 
+        // Boucle pour récupérer toutes les données par tranches
         while ($currentStartTime < $endTime) {
+            // Calculer l'heure de fin pour cette requête
+            $currentEndTime = min($endTime, $currentStartTime + ($limit * $this->getIntervalInMilliseconds($interval)));
+
             $params = [
                 'symbol' => $symbol,
                 'interval' => $interval,
                 'limit' => $limit,
-                'startTime' => $currentStartTime
+                'startTime' => $currentStartTime,
+                'endTime' => $currentEndTime
             ];
 
-            // Ajouter le paramètre endTime seulement si nous ne sommes pas à la dernière itération
-            if ($currentStartTime + ($limit * $this->getIntervalInMilliseconds($interval)) < $endTime) {
-                $params['endTime'] = $endTime;
+            try {
+                // Effectuer la requête API
+                $response = $this->binanceAPI->getKlines($symbol, $interval, $limit, $currentStartTime, $currentEndTime);
+
+                if (empty($response)) {
+                    echo "Aucune donnée reçue pour la période " . date('Y-m-d', $currentStartTime/1000) . " à " . date('Y-m-d', $currentEndTime/1000) . "\n";
+                    break;
+                }
+
+                echo "Reçu " . count($response) . " bougies pour la période " . date('Y-m-d', $currentStartTime/1000) . " à " . date('Y-m-d', $currentEndTime/1000) . "\n";
+
+                $klines = array_merge($klines, $response);
+
+                // Mettre à jour le startTime pour la prochaine itération
+                $lastKline = end($response);
+                $currentStartTime = $lastKline[0] + $this->getIntervalInMilliseconds($interval);
+
+                // Petite pause pour ne pas dépasser les limites de l'API
+                usleep(300000); // 300ms
+            } catch (Exception $e) {
+                echo "Erreur lors de la récupération des données: " . $e->getMessage() . "\n";
+                // Attendre un peu plus longtemps en cas d'erreur
+                sleep(2);
+                // Avancer quand même pour éviter une boucle infinie
+                $currentStartTime += $this->getIntervalInMilliseconds($interval) * $limit;
             }
-
-            $response = $this->binanceAPI->getKlines($symbol, $interval, $limit, $currentStartTime, $endTime);
-
-            if (empty($response)) {
-                break;
-            }
-
-            $klines = array_merge($klines, $response);
-
-            // Mettre à jour le startTime pour la prochaine itération
-            $lastKline = end($response);
-            $currentStartTime = $lastKline[0] + 1; // +1 pour éviter les doublons
-
-            // Petite pause pour ne pas dépasser les limites de l'API
-            usleep(100000); // 100ms
         }
+
+        echo "Total de " . count($klines) . " bougies téléchargées\n";
 
         return $klines;
     }

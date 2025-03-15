@@ -8,8 +8,32 @@ require_once __DIR__ . '/src/Strategy/RSIStrategy.php';
 require_once __DIR__ . '/src/Backtest/DataLoader.php';
 require_once __DIR__ . '/src/Backtest/BacktestEngine.php';
 
+// Options pour getopt
+$short_options = "";
+$long_options = [
+    "download",       // --download
+    "symbol:",        // --symbol=value
+    "params",         // --params
+    "config:",        // --config=value
+    "start-date:",    // --start-date=value
+    "end-date:",      // --end-date=value
+];
+
 // Analyser les arguments de ligne de commande
-$options = getopt('', ['download', 'symbol:', 'params', 'config:']);
+$options = getopt($short_options, $long_options);
+
+// Afficher l'utilisation
+if (isset($argv[1]) && $argv[1] === '--help') {
+    echo "Usage: php backtest.php [strategy] [options]\n";
+    echo "Options:\n";
+    echo "  --download                   Télécharger de nouvelles données historiques\n";
+    echo "  --symbol=SYMBOL              Symbole à tester (ex: BTCUSDT)\n";
+    echo "  --params key1=value1 key2=value2  Paramètres de stratégie\n";
+    echo "  --config=FILE                Utiliser un fichier de configuration alternatif\n";
+    echo "  --start-date=DATE            Date de début (format: YYYY-MM-DD)\n";
+    echo "  --end-date=DATE              Date de fin (format: YYYY-MM-DD)\n";
+    exit(0);
+}
 
 // Vérifier si un fichier de configuration alternatif est spécifié
 if (isset($options['config'])) {
@@ -24,6 +48,15 @@ if (isset($options['config'])) {
     $config = require_once __DIR__ . '/config/config.php';
 }
 
+// Écraser les dates si spécifiées en ligne de commande
+if (isset($options['start-date'])) {
+    $config['backtest']['start_date'] = $options['start-date'];
+}
+
+if (isset($options['end-date'])) {
+    $config['backtest']['end_date'] = $options['end-date'];
+}
+
 // Créer l'instance de l'API Binance
 $binanceAPI = new BinanceAPI($config);
 
@@ -35,15 +68,22 @@ $symbol = isset($options['symbol']) ? $options['symbol'] : 'BTCUSDT';
 
 // Vérifier si les données historiques existent déjà
 $dataFile = __DIR__ . '/data/historical/' . $symbol . '_1h.csv';
+$download = isset($options['download']);
 
-if (!file_exists($dataFile) || isset($options['download'])) {
+if (!file_exists($dataFile) || $download) {
     echo "Téléchargement des données historiques pour {$symbol}...\n";
 
     // Télécharger les données historiques
     $startDate = $config['backtest']['start_date'];
     $endDate = $config['backtest']['end_date'];
 
+    echo "Période: de {$startDate} à {$endDate}\n";
+
     $historicalData = $dataLoader->downloadHistoricalData($symbol, '1h', $startDate, $endDate);
+
+    if (count($historicalData) === 0) {
+        die("Erreur: Aucune donnée historique n'a pu être téléchargée. Vérifiez les dates et le symbole.\n");
+    }
 
     // Sauvegarder les données dans un fichier CSV
     $dataLoader->saveToCSV($historicalData, $dataFile);
@@ -56,7 +96,9 @@ if (!file_exists($dataFile) || isset($options['download'])) {
 // Charger les données historiques
 $historicalData = $dataLoader->loadFromCSV($dataFile);
 
-echo "Données chargées : " . count($historicalData) . " points\n";
+echo "Données chargées : " . count($historicalData) . " points, du " .
+    date('Y-m-d H:i:s', $historicalData[0][0]/1000) . " au " .
+    date('Y-m-d H:i:s', $historicalData[count($historicalData)-1][0]/1000) . "\n";
 
 // Déterminer la stratégie à tester
 $strategyName = isset($argv[1]) ? $argv[1] : 'MovingAverageStrategy';
@@ -100,6 +142,7 @@ if (isset($options['params'])) {
 $backtester = new BacktestEngine($strategy, $historicalData, $config);
 
 // Exécuter le backtest
+echo "Exécution du backtest...\n";
 $results = $backtester->run();
 
 // Afficher les résultats
@@ -118,7 +161,11 @@ echo "Frais payés : " . $results['fees_paid'] . " " . $config['trading']['base_
 echo "Durée du backtest : " . $results['duration'] . " secondes\n";
 
 // Sauvegarder les résultats dans un fichier
-$resultsFile = __DIR__ . '/data/results_' . str_replace(' ', '_', $strategy->getName()) . '.json';
+$resultFileName = str_replace(' ', '_', $strategy->getName());
+$paramHash = substr(md5(uniqid('', true)), 0, 8);
+$resultFileName .= "_" . $paramHash;
+$resultsFile = __DIR__ . '/data/results_' . $resultFileName . '.json';
+
 file_put_contents($resultsFile, json_encode($results, JSON_PRETTY_PRINT));
 
 echo "Résultats détaillés sauvegardés dans {$resultsFile}\n";

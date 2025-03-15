@@ -3,6 +3,8 @@
 class BinanceAPI {
     private $apiKey;
     private $apiSecret;
+    private $testBaseUrl;
+    private $realBaseUrl;
     private $baseUrl;
     private $testMode;
 
@@ -11,18 +13,21 @@ class BinanceAPI {
         $this->apiSecret = $config['api']['secret'];
         $this->testMode = $config['api']['test_mode'];
 
+        $this->testBaseUrl = 'https://testnet.binance.vision/api/';
+        $this->realBaseUrl = 'https://api.binance.com/api/';
         // Utilisez l'URL testnet si en mode test
         if ($this->testMode) {
-            $this->baseUrl = 'https://testnet.binance.vision/api/';
+            $this->baseUrl = $this->testBaseUrl;
         } else {
-            $this->baseUrl = 'https://api.binance.com/api/';
+            $this->baseUrl = $this->realBaseUrl;
         }
     }
 
     /**
      * Récupère les données de marché pour un symbole
+     * Version corrigée pour prendre en compte startTime et endTime
      */
-    public function getKlines($symbol, $interval = '1h', $limit = 100) {
+    public function getKlines($symbol, $interval = '1h', $limit = 100, $startTime = null, $endTime = null) {
         $endpoint = 'v3/klines';
         $params = [
             'symbol' => $symbol,
@@ -30,7 +35,16 @@ class BinanceAPI {
             'limit' => $limit
         ];
 
-        return $this->makeRequest($endpoint, $params, 'GET', false);
+        // Ajouter startTime et endTime s'ils sont spécifiés
+        if ($startTime !== null) {
+            $params['startTime'] = $startTime;
+        }
+
+        if ($endTime !== null) {
+            $params['endTime'] = $endTime;
+        }
+
+        return $this->makeRequest($endpoint, $params, 'GET', false, $this->realBaseUrl);
     }
 
     /**
@@ -149,8 +163,9 @@ class BinanceAPI {
     /**
      * Effectue une requête à l'API Binance
      */
-    private function makeRequest($endpoint, array $params = [], $method = 'GET', $auth = false) {
-        $url = $this->baseUrl . $endpoint;
+    private function makeRequest($endpoint, array $params = [], $method = 'GET', $auth = false, $baseUrl = null) {
+        $baseUrl ??= $this->baseUrl;
+        $url = $baseUrl . $endpoint;
 
         if ($auth) {
             $params['timestamp'] = $this->getTimestamp();

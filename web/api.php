@@ -105,15 +105,22 @@ switch ($action) {
             $initial_balance = isset($_POST['initial_balance']) ? floatval($_POST['initial_balance']) : 1000;
             $download_data = isset($_POST['download_data']) && $_POST['download_data'] == '1';
 
-            // Récupérer les paramètres de stratégie
-            $params = [];
-
+            // Extraire tous les paramètres de stratégie du formulaire
+            $strategy_params = [];
             foreach ($_POST as $key => $value) {
                 if (strpos($key, 'param_') === 0) {
+                    // Extraire le nom du paramètre (enlever le préfixe param_)
                     $param_name = substr($key, 6);
-                    $params[$param_name] = is_numeric($value) ? (float) $value : $value;
+                    // Convertir en nombre si c'est numérique
+                    $strategy_params[$param_name] = is_numeric($value) ? (float) $value : $value;
                 }
             }
+
+            // Debug des paramètres
+            error_log("Executing backtest with strategy: " . $strategy);
+            error_log("Parameters: " . json_encode($strategy_params));
+            error_log("Symbol: " . $symbol);
+            error_log("Period: " . $period_start . " to " . $period_end);
 
             // Modifier temporairement la configuration pour le backtest
             $config_file = BOT_PATH . '/config/config.php';
@@ -125,6 +132,25 @@ switch ($action) {
             $backtest_config['backtest']['end_date'] = $period_end;
             $backtest_config['backtest']['initial_balance'] = $initial_balance;
 
+            // Ajouter les paramètres spécifiques au trading si présents
+            if (isset($strategy_params['investment_per_trade'])) {
+                $backtest_config['trading']['investment_per_trade'] = $strategy_params['investment_per_trade'];
+                // Ne pas passer ce paramètre à la stratégie
+                unset($strategy_params['investment_per_trade']);
+            }
+
+            if (isset($strategy_params['stop_loss_percentage'])) {
+                $backtest_config['trading']['stop_loss_percentage'] = $strategy_params['stop_loss_percentage'];
+                // Ne pas passer ce paramètre à la stratégie
+                unset($strategy_params['stop_loss_percentage']);
+            }
+
+            if (isset($strategy_params['take_profit_percentage'])) {
+                $backtest_config['trading']['take_profit_percentage'] = $strategy_params['take_profit_percentage'];
+                // Ne pas passer ce paramètre à la stratégie
+                unset($strategy_params['take_profit_percentage']);
+            }
+
             // Sauvegarder temporairement la configuration
             $temp_config_file = BOT_PATH . '/config/temp_backtest_config.php';
             file_put_contents($temp_config_file, '<?php return ' . var_export($backtest_config, true) . ';');
@@ -135,6 +161,12 @@ switch ($action) {
                 mkdir($data_dir, 0777, true);
             }
 
+            // Préparer les paramètres pour la commande en ligne
+            $params_string = '';
+            foreach ($strategy_params as $key => $value) {
+                $params_string .= ' ' . escapeshellarg($key . '=' . $value);
+            }
+
             // Construire la commande
             $command = 'cd ' . BOT_PATH . ' && php backtest.php ' . escapeshellarg($strategy);
 
@@ -143,21 +175,19 @@ switch ($action) {
                 $command .= ' --download';
             }
 
-            // Ajouter le symbole si spécifié
-            if ($symbol) {
-                $command .= ' --symbol=' . escapeshellarg($symbol);
-            }
+            // Ajouter le symbole
+            $command .= ' --symbol=' . escapeshellarg($symbol);
 
-            // Ajouter les paramètres
-            if (!empty($params)) {
-                $command .= ' --params';
-                foreach ($params as $key => $value) {
-                    $command .= ' ' . escapeshellarg($key . '=' . $value);
-                }
+            // Ajouter les paramètres si présents
+            if (!empty($strategy_params)) {
+                $command .= ' --params' . $params_string;
             }
 
             // Ajouter le chemin de la configuration temporaire
             $command .= ' --config=' . escapeshellarg($temp_config_file);
+
+            // Journaliser la commande complète pour le débogage
+            error_log("Executing command: " . $command);
 
             // Exécuter la commande
             $output = [];
@@ -183,7 +213,6 @@ switch ($action) {
             send_json_response(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
         }
         break;
-
     // Obtenir les données d'équité
     case 'get_equity_data':
         try {
