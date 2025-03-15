@@ -3,7 +3,7 @@
 namespace Kwizer15\TradingBot;
 
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
-use Kwizer15\TradingBot\Utils\Logger;
+use Psr\Log\LoggerInterface;
 
 class TradingBot {
     private $binanceAPI;
@@ -12,7 +12,7 @@ class TradingBot {
     private $logger;
     private $positions = [];
 
-    public function __construct(BinanceAPI $binanceAPI, StrategyInterface $strategy, array $config, Logger $logger = null) {
+    public function __construct(BinanceAPI $binanceAPI, StrategyInterface $strategy, array $config, LoggerInterface $logger = null) {
         $this->binanceAPI = $binanceAPI;
         $this->strategy = $strategy;
         $this->config = $config;

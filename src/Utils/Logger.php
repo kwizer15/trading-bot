@@ -2,7 +2,14 @@
 
 namespace Kwizer15\TradingBot\Utils;
 
-class Logger {
+use Psr\Log\LoggerInterface;
+use Psr\Log\LoggerTrait;
+
+final class Logger implements LoggerInterface
+{
+
+    use LoggerTrait;
+
     private $logFile;
     private $logLevel;
     private $levels = [
@@ -12,7 +19,8 @@ class Logger {
         'error' => 3
     ];
 
-    public function __construct($logFile, $level = 'info') {
+    public function __construct($logFile, $level = 'info')
+    {
         $this->logFile = $logFile;
         $this->logLevel = $this->levels[$level] ?? 1;
 
@@ -23,7 +31,8 @@ class Logger {
         }
     }
 
-    public function log($level, $message) {
+    public function log($level, string|\Stringable $message, array $context = []): void
+    {
         if ($this->levels[$level] < $this->logLevel) {
             return;
         }
