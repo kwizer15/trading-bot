@@ -1,0 +1,16 @@
+services:
+  php:
+    build:
+      context: .docker/php
+    volumes:
+      - .:/srv:rw,cached
+
+  web:
+    build:
+      context: .docker/nginx
+    environment:
+      index_regex: ".+\\.php"
+    volumes:
+      - ./web:/srv/web:cached
+    ports:
+      - "80:80"
