@@ -1,18 +1,17 @@
 <?php
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+require __DIR__ . '/vendor/autoload.php';
 
-// Inclure les fichiers nécessaires
-require_once __DIR__ . '/src/BinanceAPI.php';
-require_once __DIR__ . '/src/Strategy/StrategyInterface.php';
-require_once __DIR__ . '/src/Strategy/MovingAverageStrategy.php';
-require_once __DIR__ . '/src/Strategy/RSIStrategy.php';
-require_once __DIR__ . '/src/Backtest/DataLoader.php';
-require_once __DIR__ . '/src/Backtest/BacktestEngine.php';
+use Kwizer15\TradingBot\Backtest\BacktestEngine;
+use Kwizer15\TradingBot\Backtest\DataLoader;
+use Kwizer15\TradingBot\BinanceAPI;
+use Kwizer15\TradingBot\Strategy\MovingAverageStrategy;
+use Kwizer15\TradingBot\Strategy\RSIStrategy;
 
 // Options pour getopt
 $short_options = "";
 $long_options = [
+    "strategy:",       // --download
     "download",       // --download
     "symbol:",        // --symbol=value
     "params",         // --params
@@ -28,6 +27,7 @@ $options = getopt($short_options, $long_options);
 if (isset($argv[1]) && $argv[1] === '--help') {
     echo "Usage: php backtest.php [strategy] [options]\n";
     echo "Options:\n";
+    echo "  --strategy=STRATEGY          Strategie à utiliser\n";
     echo "  --download                   Télécharger de nouvelles données historiques\n";
     echo "  --symbol=SYMBOL              Symbole à tester (ex: BTCUSDT)\n";
     echo "  --params key1=value1 key2=value2  Paramètres de stratégie\n";
