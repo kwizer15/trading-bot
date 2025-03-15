@@ -163,6 +163,70 @@ class BinanceAPI {
     }
 
     /**
+     * Récupère tous les symboles de trading disponibles
+     * @param string $baseCurrency Devise de base (ex: USDT, BTC)
+     * @return array Liste des symboles disponibles
+     */
+    public function getExchangeInfo($baseCurrency = null) {
+        $endpoint = 'v3/exchangeInfo';
+        $result = $this->makeRequest($endpoint, [], 'GET', false);
+
+        $symbols = [];
+
+        if (isset($result['symbols'])) {
+            foreach ($result['symbols'] as $symbol) {
+                // Vérifier si le symbole est actif pour le trading
+                if ($symbol['status'] === 'TRADING') {
+                    // Si une devise de base est spécifiée, filtrer les paires qui se terminent par cette devise
+                    if ($baseCurrency === null || substr($symbol['symbol'], -strlen($baseCurrency)) === $baseCurrency) {
+                        $baseAsset = $symbol['baseAsset'];
+                        $quoteAsset = $symbol['quoteAsset'];
+
+                        // Si on a filtré par devise de base, n'ajouter que l'actif de base
+                        if ($baseCurrency !== null && $quoteAsset === $baseCurrency) {
+                            $symbols[] = $baseAsset;
+                        } else {
+                            // Sinon ajouter la paire complète
+                            $symbols[] = $symbol['symbol'];
+                        }
+                    }
+                }
+            }
+        }
+
+        return $symbols;
+    }
+
+    /**
+     * Récupère toutes les devises de base disponibles (USDT, BTC, ETH, etc.)
+     * @return array Liste des devises de base disponibles
+     */
+    public function getBaseCurrencies() {
+        $endpoint = 'v3/exchangeInfo';
+        $result = $this->makeRequest($endpoint, [], 'GET', false);
+
+        $baseCurrencies = [];
+
+        if (isset($result['symbols'])) {
+            foreach ($result['symbols'] as $symbol) {
+                if ($symbol['status'] === 'TRADING') {
+                    $quoteAsset = $symbol['quoteAsset'];
+                    if (!in_array($quoteAsset, $baseCurrencies)) {
+                        $baseCurrencies[] = $quoteAsset;
+                    }
+                }
+            }
+        }
+
+        // Trier et mettre les principales devises en premier
+        $priorityBaseCurrencies = ['USDT', 'BUSD', 'USDC', 'BTC', 'ETH', 'BNB'];
+        $otherBaseCurrencies = array_diff($baseCurrencies, $priorityBaseCurrencies);
+        sort($otherBaseCurrencies);
+
+        return array_merge($priorityBaseCurrencies, $otherBaseCurrencies);
+    }
+
+    /**
      * Effectue une requête à l'API Binance
      */
     private function makeRequest($endpoint, array $params = [], $method = 'GET', $auth = false, $baseUrl = null) {

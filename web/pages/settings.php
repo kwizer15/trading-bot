@@ -45,6 +45,32 @@
                     <i class="fas fa-exclamation-triangle"></i>
                     Assurez-vous que vos clés API ont les permissions de lecture et de trading, mais pas de retrait.
                 </div>
+
+                <!-- Bouton pour afficher/masquer les instructions -->
+                <p class="mt-3">
+                    <button class="btn btn-outline-info" type="button" data-bs-toggle="collapse" data-bs-target="#apiInstructions" aria-expanded="false" aria-controls="apiInstructions">
+                        <i class="fas fa-info-circle"></i> Comment obtenir vos clés API ?
+                    </button>
+                </p>
+
+                <!-- Instructions cachées par défaut -->
+                <div class="collapse" id="apiInstructions">
+                    <div class="card card-body bg-light">
+                        <h6>Obtenir des clés API Binance</h6>
+                        <ol>
+                            <li>Connectez-vous à votre compte <a href="https://www.binance.com/fr/my/settings/api-management" target="_blank">Binance</a></li>
+                            <li>Allez dans "Gestion API" <a href="https://www.binance.com/fr/my/settings/api-management" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fas fa-external-link-alt"></i> Accéder</a></li>
+                            <li>Cliquez sur "Créer une clé API"</li>
+                            <li>Suivez les étapes de vérification</li>
+                            <li>Définissez un nom pour votre API</li>
+                            <li>Cochez uniquement les options "Lecture" et "Trading spot et marge"</li>
+                            <li>Ajoutez des restrictions IP si nécessaire (recommandé)</li>
+                        </ol>
+                        <hr>
+                        <h6>Mode Test</h6>
+                        <p>Pour le mode test, vous pouvez obtenir des clés API de testnet ici : <a href="https://testnet.binance.vision/" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-vial"></i> Binance Testnet</a></p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -57,9 +83,19 @@
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <label for="base-currency" class="form-label">Devise de base</label>
-                        <input type="text" class="form-control" id="base-currency" name="trading[base_currency]"
-                               value="<?php echo get_config('trading')['base_currency']; ?>" required>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="base-currency" name="trading[base_currency]"
+                                   value="<?php echo get_config('trading')['base_currency']; ?>" required>
+                            <button class="btn btn-outline-secondary" type="button" id="load-currencies">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
                         <div class="form-text">Devise utilisée pour les trades (ex: USDT)</div>
+                        <div id="currencies-dropdown" class="mt-2" style="display: none;">
+                            <select class="form-select" id="available-currencies">
+                                <option value="">Chargement...</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label for="investment-per-trade" class="form-label">Investissement par trade</label>
@@ -74,18 +110,30 @@
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <label for="symbols" class="form-label">Symboles à trader</label>
-                        <select class="form-select" id="symbols" name="trading[symbols][]" multiple size="5" required>
-                            <?php
-                            $popular_symbols = ['BTC', 'ETH', 'BNB', 'ADA', 'XRP', 'SOL', 'DOT', 'DOGE', 'AVAX', 'MATIC'];
-                            $selected_symbols = get_config('trading')['symbols'];
-
-                            foreach ($popular_symbols as $symbol) {
-                                $selected = in_array($symbol, $selected_symbols) ? 'selected' : '';
-                                echo "<option value=\"{$symbol}\" {$selected}>{$symbol}</option>";
-                            }
-                            ?>
-                        </select>
+                        <div class="input-group">
+                            <select class="form-select" id="symbols" name="trading[symbols][]" multiple size="5" required>
+                                <?php
+                                $selected_symbols = get_config('trading')['symbols'];
+                                foreach ($selected_symbols as $symbol) {
+                                    echo "<option value=\"{$symbol}\" selected>{$symbol}</option>";
+                                }
+                                ?>
+                            </select>
+                            <button class="btn btn-outline-secondary" type="button" id="load-symbols">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
                         <div class="form-text">Sélectionnez les crypto-monnaies à trader (Ctrl+clic pour sélection multiple)</div>
+                        <div class="mt-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="top-volume" checked>
+                                <label class="form-check-label" for="top-volume">Top Volume</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="filter-stablecoins">
+                                <label class="form-check-label" for="filter-stablecoins">Exclure stablecoins</label>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label for="max-positions" class="form-label">Positions maximum</label>
@@ -289,6 +337,104 @@
 
 <script>
     $(document).ready(function() {
+        // Fonction pour charger les devises de base disponibles
+        $('#load-currencies').on('click', function() {
+            const $btn = $(this);
+            const $dropdown = $('#currencies-dropdown');
+            const $select = $('#available-currencies');
+
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
+            $select.html('<option value="">Chargement...</option>');
+            $dropdown.show();
+
+            $.ajax({
+                url: 'api.php',
+                data: { action: 'get_base_currencies' },
+                method: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        let options = '';
+                        response.data.forEach(function(currency) {
+                            options += `<option value="${currency}">${currency}</option>`;
+                        });
+                        $select.html(options);
+                    } else {
+                        $select.html('<option value="">Erreur: ' + response.message + '</option>');
+                    }
+                    $btn.prop('disabled', false).html('<i class="fas fa-sync-alt"></i>');
+                },
+                error: function() {
+                    $select.html('<option value="">Erreur de connexion</option>');
+                    $btn.prop('disabled', false).html('<i class="fas fa-sync-alt"></i>');
+                }
+            });
+        });
+
+        // Appliquer la devise sélectionnée
+        $('#available-currencies').on('change', function() {
+            const selectedCurrency = $(this).val();
+            if (selectedCurrency) {
+                $('#base-currency').val(selectedCurrency);
+                $('#currencies-dropdown').hide();
+                // Mettre à jour le texte de l'investissement par trade
+                $('.input-group-text').text(selectedCurrency);
+            }
+        });
+
+        // Fonction pour charger les symboles disponibles
+        $('#load-symbols').on('click', function() {
+            const $btn = $(this);
+            const $select = $('#symbols');
+            const baseCurrency = $('#base-currency').val();
+            const topVolume = $('#top-volume').is(':checked');
+            const filterStablecoins = $('#filter-stablecoins').is(':checked');
+
+            // Sauvegarder les symboles déjà sélectionnés
+            const selectedSymbols = [];
+            $select.find('option:selected').each(function() {
+                selectedSymbols.push($(this).val());
+            });
+
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
+
+            $.ajax({
+                url: 'api.php',
+                data: {
+                    action: 'get_symbols',
+                    base_currency: baseCurrency,
+                    top_volume: topVolume,
+                    filter_stablecoins: filterStablecoins
+                },
+                method: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        let options = '';
+                        response.data.forEach(function(symbol) {
+                            const isSelected = selectedSymbols.includes(symbol) ? 'selected' : '';
+                            options += `<option value="${symbol}" ${isSelected}>${symbol}</option>`;
+                        });
+                        $select.html(options);
+                    } else {
+                        alert('Erreur: ' + response.message);
+                    }
+                    $btn.prop('disabled', false).html('<i class="fas fa-sync-alt"></i>');
+                },
+                error: function() {
+                    alert('Erreur de connexion');
+                    $btn.prop('disabled', false).html('<i class="fas fa-sync-alt"></i>');
+                }
+            });
+        });
+
+        // Réagir aux changements de filtres pour les symboles
+        $('#top-volume, #filter-stablecoins').on('change', function() {
+            if ($('#symbols option').length > 0) {
+                $('#load-symbols').click();
+            }
+        });
+
         // Gérer l'affichage des champs d'authentification
         $('#auth-enabled').on('change', function() {
             if ($(this).is(':checked')) {

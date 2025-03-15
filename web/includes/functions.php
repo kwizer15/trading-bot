@@ -155,7 +155,7 @@ function get_logs($max_lines = null) {
  * Vérifie si le bot est en cours d'exécution
  */
 function is_bot_running() {
-    $pid_file = BOT_PATH . '/bot.pid';
+    $pid_file = BOT_PATH . '/bin/bot.pid';
 
     if (file_exists($pid_file)) {
         $pid = trim(file_get_contents($pid_file));

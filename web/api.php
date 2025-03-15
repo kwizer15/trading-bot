@@ -37,11 +37,11 @@ switch ($action) {
             }
 
             // Chemin du script de démarrage
-            $daemon_script = BOT_PATH . '/daemon.sh';
+            $daemon_script = BOT_PATH . '/bin/daemon.sh';
 
             // Si le script de démarrage n'existe pas, le créer
             if (!file_exists($daemon_script)) {
-                $script_content = "#!/bin/bash\ncd " . BOT_PATH . "\nphp run.php --daemon > /dev/null 2>&1 &\necho \$! > " . BOT_PATH . "/bot.pid\n";
+                $script_content = "#!/bin/bash\ncd " . BOT_PATH . "\nphp run.php --daemon > /dev/null 2>&1 &\necho \$! > " . BOT_PATH . "/bin/bot.pid\n";
                 file_put_contents($daemon_script, $script_content);
                 chmod($daemon_script, 0755);
             }
@@ -70,7 +70,7 @@ switch ($action) {
             }
 
             // Lire le PID
-            $pid_file = BOT_PATH . '/bot.pid';
+            $pid_file = BOT_PATH . '/bin/bot.pid';
             if (!file_exists($pid_file)) {
                 send_json_response(['success' => false, 'message' => 'Fichier PID non trouvé']);
             }
@@ -320,6 +320,57 @@ switch ($action) {
             send_json_response(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
         }
         break;
+
+        case 'get_base_currencies':
+            try {
+                $config = get_config();
+                $api = new Kwizer15\TradingBot\BinanceAPI($config);
+                $baseCurrencies = $api->getBaseCurrencies();
+
+                send_json_response([
+                    'success' => true,
+                    'data' => $baseCurrencies
+                ]);
+            } catch (Exception $e) {
+                send_json_response([
+                    'success' => false,
+                    'message' => $e->getMessage()
+                ]);
+            }
+            break;
+
+        case 'get_symbols':
+                try {
+                    $config = get_config();
+                    $api = new Kwizer15\TradingBot\BinanceAPI($config);
+
+                    $baseCurrency = $_GET['base_currency'] ?? 'USDT';
+                    $symbols = $api->getExchangeInfo($baseCurrency);
+
+                    // Filtrer les stablecoins si demandé
+                    if (isset($_GET['filter_stablecoins']) && $_GET['filter_stablecoins'] === 'true') {
+                        $stablecoins = ['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'UST', 'USDP', 'USDD', 'GUSD'];
+                        $symbols = array_filter($symbols, function($symbol) use ($stablecoins) {
+                            return !in_array($symbol, $stablecoins);
+                        });
+                    }
+
+                    // Si top volume demandé, on pourrait ajouter une logique pour récupérer les symboles
+                    // par volume, mais cela nécessiterait un autre appel API
+                    // Pour l'instant, on retourne simplement les symboles triés
+                    sort($symbols);
+
+                    send_json_response([
+                        'success' => true,
+                        'data' => array_values($symbols)
+                    ]);
+                } catch (Exception $e) {
+                    send_json_response([
+                        'success' => false,
+                        'message' => $e->getMessage()
+                    ]);
+                }
+                break;
 
     // Action non reconnue
     default:

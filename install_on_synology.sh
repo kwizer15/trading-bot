@@ -124,25 +124,25 @@ if [[ $CREATE_TASK == "o" || $CREATE_TASK == "O" ]]; then
             ;;
         4)
             echo -e "${YELLOW}Configuration du mode daemon...${NC}"
-            DAEMON_SCRIPT="$INSTALL_PATH/daemon.sh"
+            DAEMON_SCRIPT="$INSTALL_PATH/bin/daemon.sh"
 
             # Créer le script du daemon
             cat > "$DAEMON_SCRIPT" << EOF
 #!/bin/bash
 cd $INSTALL_PATH
 php run.php --daemon > /dev/null 2>&1 &
-echo \$! > $INSTALL_PATH/bot.pid
+echo \$! > $INSTALL_PATH/bin/bot.pid
 EOF
 
             chmod +x "$DAEMON_SCRIPT"
 
             # Créer le script d'arrêt
-            STOP_SCRIPT="$INSTALL_PATH/stop.sh"
+            STOP_SCRIPT="$INSTALL_PATH/bin/stop.sh"
             cat > "$STOP_SCRIPT" << EOF
 #!/bin/bash
-if [ -f "$INSTALL_PATH/bot.pid" ]; then
-    kill \$(cat $INSTALL_PATH/bot.pid)
-    rm $INSTALL_PATH/bot.pid
+if [ -f "$INSTALL_PATH/bin/bot.pid" ]; then
+    kill \$(cat $INSTALL_PATH/bin/bot.pid)
+    rm $INSTALL_PATH/bin/bot.pid
     echo "Bot arrêté."
 else
     echo "Le bot n'est pas en cours d'exécution."
