@@ -37,11 +37,11 @@ switch ($action) {
             }
 
             // Chemin du script de démarrage
-            $daemon_script = BOT_PATH . '/daemon.sh';
+            $daemon_script = BOT_PATH . '/bin/daemon.sh';
 
             // Si le script de démarrage n'existe pas, le créer
             if (!file_exists($daemon_script)) {
-                $script_content = "#!/bin/bash\ncd " . BOT_PATH . "\nphp run.php --daemon > /dev/null 2>&1 &\necho \$! > " . BOT_PATH . "/bot.pid\n";
+                $script_content = "#!/bin/bash\ncd " . BOT_PATH . "\nphp run.php --daemon > /dev/null 2>&1 &\necho \$! > " . BOT_PATH . "/bin/bot.pid\n";
                 file_put_contents($daemon_script, $script_content);
                 chmod($daemon_script, 0755);
             }
@@ -70,7 +70,7 @@ switch ($action) {
             }
 
             // Lire le PID
-            $pid_file = BOT_PATH . '/bot.pid';
+            $pid_file = BOT_PATH . '/bin/bot.pid';
             if (!file_exists($pid_file)) {
                 send_json_response(['success' => false, 'message' => 'Fichier PID non trouvé']);
             }
@@ -171,7 +171,7 @@ switch ($action) {
             }
 
             // Construire la commande
-            $command = 'cd ' . BOT_PATH . ' && php backtest.php ' . escapeshellarg($strategy);
+            $command = 'cd ' . BOT_PATH . ' && php backtest.php --strategy=' . escapeshellarg($strategy);
 
             // Ajouter le flag de téléchargement si nécessaire
             if ($download_data) {
@@ -273,19 +273,39 @@ switch ($action) {
             $config_file = BOT_PATH . '/config/config.php';
             $current_config = require $config_file;
 
-            // Mettre à jour la configuration
-            foreach ($_POST as $key => $value) {
-                // Traiter les clés imbriquées (ex: trading[base_currency])
-                if (strpos($key, '[') !== false && strpos($key, ']') !== false) {
-                    preg_match('/^([^\[]+)\[([^\]]+)\]$/', $key, $matches);
-                    if (count($matches) === 3) {
-                        $section = $matches[1];
-                        $option = $matches[2];
+            foreach ($_POST as $section => $values) {
+                // Ignorer l'action du formulaire
+                if ($section === 'action') {
+                    continue;
+                }
 
-                        if (isset($current_config[$section])) {
-                            $current_config[$section][$option] = is_numeric($value) ? (float) $value : $value;
+                // S'assurer que la section existe dans la configuration
+                if (!isset($current_config[$section])) {
+                    $current_config[$section] = [];
+                }
+
+                // Si c'est un tableau, fusionner avec la configuration existante
+                if (is_array($values)) {
+                    foreach ($values as $key => $value) {
+                        // Convertir les valeurs numériques
+                        if (is_numeric($value)) {
+                            $value = strpos($value, '.') !== false ? (float)$value : (int)$value;
+                        } else if ($value === '1') {
+                            $value = true;
+                        } else if ($value === '0') {
+                            $value = false;
+                        }
+
+                        // Traitement spécial pour les tableaux (comme trading[symbols])
+                        if (is_array($value)) {
+                            $current_config[$section][$key] = $value;
+                        } else {
+                            $current_config[$section][$key] = $value;
                         }
                     }
+                } else {
+                    // Clé simple
+                    $current_config[$section] = $values;
                 }
             }
 
@@ -300,6 +320,57 @@ switch ($action) {
             send_json_response(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
         }
         break;
+
+        case 'get_base_currencies':
+            try {
+                $config = get_config();
+                $api = new Kwizer15\TradingBot\BinanceAPI($config);
+                $baseCurrencies = $api->getBaseCurrencies();
+
+                send_json_response([
+                    'success' => true,
+                    'data' => $baseCurrencies
+                ]);
+            } catch (Exception $e) {
+                send_json_response([
+                    'success' => false,
+                    'message' => $e->getMessage()
+                ]);
+            }
+            break;
+
+        case 'get_symbols':
+                try {
+                    $config = get_config();
+                    $api = new Kwizer15\TradingBot\BinanceAPI($config);
+
+                    $baseCurrency = $_GET['base_currency'] ?? 'USDT';
+                    $symbols = $api->getExchangeInfo($baseCurrency);
+
+                    // Filtrer les stablecoins si demandé
+                    if (isset($_GET['filter_stablecoins']) && $_GET['filter_stablecoins'] === 'true') {
+                        $stablecoins = ['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'UST', 'USDP', 'USDD', 'GUSD'];
+                        $symbols = array_filter($symbols, function($symbol) use ($stablecoins) {
+                            return !in_array($symbol, $stablecoins);
+                        });
+                    }
+
+                    // Si top volume demandé, on pourrait ajouter une logique pour récupérer les symboles
+                    // par volume, mais cela nécessiterait un autre appel API
+                    // Pour l'instant, on retourne simplement les symboles triés
+                    sort($symbols);
+
+                    send_json_response([
+                        'success' => true,
+                        'data' => array_values($symbols)
+                    ]);
+                } catch (Exception $e) {
+                    send_json_response([
+                        'success' => false,
+                        'message' => $e->getMessage()
+                    ]);
+                }
+                break;
 
     // Action non reconnue
     default:

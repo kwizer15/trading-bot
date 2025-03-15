@@ -284,7 +284,7 @@ Les paramètres des stratégies sont définis dans `config/strategies.php`. Chaq
 Pour utiliser une variante spécifique d'une stratégie, vous pouvez la spécifier lors du lancement du bot :
 
 ```bash
-php run.php MovingAverageStrategy --params short_period=7 long_period=21
+php run.php --strategy=MovingAverageStrategy --params "short_period=7 long_period=21"
 ```
 
 ## Stratégies de Trading
@@ -489,13 +489,13 @@ php run.php
 Par défaut, le bot utilisera la stratégie MovingAverageStrategy. Pour spécifier une autre stratégie :
 
 ```bash
-php run.php RSIStrategy
+php run.php --strategy=RSIStrategy
 ```
 
 Pour utiliser des paramètres personnalisés :
 
 ```bash
-php run.php RSIStrategy --params period=14 oversold=25 overbought=75
+php run.php --strategy=RSIStrategy --params "period=14 oversold=25 overbought=75"
 ```
 
 ### Mode daemon
@@ -512,10 +512,10 @@ Si vous avez utilisé le script d'installation, vous pouvez également utiliser 
 
 ```bash
 # Pour démarrer le daemon
-./daemon.sh
+./bin/daemon.sh
 
 # Pour arrêter le daemon
-./stop.sh
+./bin/stop.sh
 ```
 
 ### Tâches planifiées

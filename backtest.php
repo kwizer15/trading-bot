@@ -1,18 +1,16 @@
 <?php
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+require __DIR__ . '/vendor/autoload.php';
 
-// Inclure les fichiers nécessaires
-require_once __DIR__ . '/src/BinanceAPI.php';
-require_once __DIR__ . '/src/Strategy/StrategyInterface.php';
-require_once __DIR__ . '/src/Strategy/MovingAverageStrategy.php';
-require_once __DIR__ . '/src/Strategy/RSIStrategy.php';
-require_once __DIR__ . '/src/Backtest/DataLoader.php';
-require_once __DIR__ . '/src/Backtest/BacktestEngine.php';
+use Kwizer15\TradingBot\Backtest\BacktestEngine;
+use Kwizer15\TradingBot\Backtest\DataLoader;
+use Kwizer15\TradingBot\BinanceAPI;
+use Kwizer15\TradingBot\Strategy\StrategyFactory;
 
 // Options pour getopt
 $short_options = "";
 $long_options = [
+    "strategy:",       // --download
     "download",       // --download
     "symbol:",        // --symbol=value
     "params",         // --params
@@ -26,8 +24,9 @@ $options = getopt($short_options, $long_options);
 
 // Afficher l'utilisation
 if (isset($argv[1]) && $argv[1] === '--help') {
-    echo "Usage: php backtest.php [strategy] [options]\n";
+    echo "Usage: php backtest.php [options]\n";
     echo "Options:\n";
+    echo "  --strategy=STRATEGY          Strategie à utiliser\n";
     echo "  --download                   Télécharger de nouvelles données historiques\n";
     echo "  --symbol=SYMBOL              Symbole à tester (ex: BTCUSDT)\n";
     echo "  --params key1=value1 key2=value2  Paramètres de stratégie\n";
@@ -103,23 +102,15 @@ echo "Données chargées : " . count($historicalData) . " points, du " .
     date('Y-m-d H:i:s', $historicalData[count($historicalData)-1][0]/1000) . "\n";
 
 // Déterminer la stratégie à tester
-$strategyName = isset($argv[1]) ? $argv[1] : 'MovingAverageStrategy';
 
-// Instancier la stratégie
-switch ($strategyName) {
-    case 'RSI':
-    case 'RSIStrategy':
-        echo "Utilisation de la stratégie RSI\n";
-        $strategy = new RSIStrategy();
-        break;
+$strategyName = $options['strategy'] ?? 'MovingAverageStrategy';
+try {
+    $strategy = (new StrategyFactory())->create($strategyName);
 
-    case 'MA':
-    case 'MovingAverage':
-    case 'MovingAverageStrategy':
-    default:
-        echo "Utilisation de la stratégie Moving Average Crossover\n";
-        $strategy = new MovingAverageStrategy();
-        break;
+    echo "Utilisation de la stratégie {$strategyName}\n";
+} catch (Exception $e) {
+    echo "Erreur lors de la création de la stratégie : " . $e->getMessage() . "\n";
+    exit(1);
 }
 
 // Configurer les paramètres de la stratégie s'ils sont fournis

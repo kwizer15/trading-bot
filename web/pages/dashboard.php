@@ -14,6 +14,8 @@
     <div class="row mb-4">
         <?php
         // Calculer les statistiques
+        use Kwizer15\TradingBot\BinanceAPI;
+
         $positions = get_positions();
         $trade_history = get_trade_history();
 
@@ -23,7 +25,6 @@
 
         // Récupérer le solde depuis Binance si possible
         try {
-            require_once BOT_PATH . '/src/BinanceAPI.php';
             $config = get_config();
             $binanceAPI = new BinanceAPI($config);
 

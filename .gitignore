@@ -5,3 +5,7 @@
 !/web/assets/js/dashboard.js
 !/web/assets/css/dashboard.css
 /web/.htaccess
+/bin/bot.pid
+/bin/daemon.sh
+/bin/stop.sh
+/config/config.php

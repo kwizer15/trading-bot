@@ -11,3 +11,12 @@ phpstan: vendor/bin/phpstan phpstan.neon
 up: compose.yaml
 	docker compose up --detach
 .PHONY: up
+
+acl:
+	sudo chmod 777 -R ./config
+	sudo chmod 777 -R ./data
+	sudo chmod 777 -R ./logs
+.PHONY: acl
+
+config/config.php: config/config.default.php
+	cp $< $@

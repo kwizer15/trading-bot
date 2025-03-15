@@ -1,14 +1,11 @@
 <?php
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+use Kwizer15\TradingBot\BinanceAPI;
+use Kwizer15\TradingBot\Strategy\StrategyFactory;
+use Kwizer15\TradingBot\TradingBot;
+use Kwizer15\TradingBot\Utils\Logger;
 
-// Inclure les fichiers nécessaires
-require_once __DIR__ . '/src/BinanceAPI.php';
-require_once __DIR__ . '/src/TradingBot.php';
-require_once __DIR__ . '/src/Strategy/StrategyInterface.php';
-require_once __DIR__ . '/src/Strategy/MovingAverageStrategy.php';
-require_once __DIR__ . '/src/Strategy/RSIStrategy.php';
-require_once __DIR__ . '/src/Utils/Logger.php';
+require __DIR__ . '/vendor/autoload.php';
 
 // Charger la configuration
 $config = require_once __DIR__ . '/config/config.php';
@@ -26,34 +23,29 @@ $logger->log('info', 'Démarrage du bot de trading');
 // Créer l'instance de l'API Binance
 $binanceAPI = new BinanceAPI($config);
 
+$options = getopt('', [
+    'strategy:',
+    'daemon',
+    'params:',
+]);
 // Créer la stratégie
-$strategyName = isset($argv[1]) ? $argv[1] : 'MovingAverageStrategy';
+$strategyName = $options['strategy'] ?? 'MovingAverageStrategy';
+try {
+    $strategy = (new StrategyFactory())->create($strategyName);
 
-switch ($strategyName) {
-    case 'RSI':
-    case 'RSIStrategy':
-        $logger->log('info', 'Utilisation de la stratégie RSI');
-        $strategy = new RSIStrategy();
-        break;
-
-    case 'MA':
-    case 'MovingAverage':
-    case 'MovingAverageStrategy':
-    default:
-        $logger->log('info', 'Utilisation de la stratégie Moving Average Crossover');
-        $strategy = new MovingAverageStrategy();
-        break;
+    echo "Utilisation de la stratégie {$strategyName}\n";
+} catch (Exception $e) {
+    echo "Erreur lors de la création de la stratégie : " . $e->getMessage() . "\n";
+    exit(1);
 }
 
 // Vérifier si des paramètres de stratégie sont fournis
-if (isset($argv[2]) && $argv[2] === '--params') {
+if ($options['params']) {
+    $queryString = explode(' ', $options['params']);
     $params = [];
-
-    for ($i = 3; $i < $argc; $i++) {
-        if (strpos($argv[$i], '=') !== false) {
-            list($key, $value) = explode('=', $argv[$i]);
-            $params[$key] = is_numeric($value) ? (float) $value : $value;
-        }
+    foreach ($queryString as $param) {
+        list($key, $value) = explode('=', $argv[$i]);
+        $params[$key] = is_numeric($value) ? (float) $value : $value;
     }
 
     if (!empty($params)) {
@@ -84,7 +76,7 @@ if (function_exists('pcntl_signal')) {
 }
 
 // Mode de fonctionnement
-$mode = isset($argv[1]) && $argv[1] === '--daemon' ? 'daemon' : 'single';
+$mode = isset($options['daemon']) ? 'daemon' : 'single';
 
 if ($mode === 'daemon') {
     $logger->log('info', 'Démarrage en mode daemon (continu)');
@@ -117,37 +109,3 @@ if ($mode === 'daemon') {
 }
 
 // Classe Logger originale
-class Logger {
-    private $logFile;
-    private $logLevel;
-    private $levels = [
-        'debug' => 0,
-        'info' => 1,
-        'warning' => 2,
-        'error' => 3
-    ];
-
-    public function __construct($logFile, $level = 'info') {
-        $this->logFile = $logFile;
-        $this->logLevel = $this->levels[$level] ?? 1;
-
-        // Créer le dossier de logs si nécessaire
-        $dir = dirname($logFile);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
-    }
-
-    public function log($level, $message) {
-        if ($this->levels[$level] < $this->logLevel) {
-            return;
-        }
-
-        $logMessage = date('Y-m-d H:i:s') . " [{$level}] {$message}" . PHP_EOL;
-
-        file_put_contents($this->logFile, $logMessage, FILE_APPEND);
-
-        // Afficher également dans la console
-        echo $logMessage;
-    }
-}

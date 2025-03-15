@@ -1,5 +1,6 @@
 <?php
 
+namespace Kwizer15\TradingBot\Strategy;
 interface StrategyInterface {
     /**
      * Analyse les données du marché et détermine si un signal d'achat est présent
