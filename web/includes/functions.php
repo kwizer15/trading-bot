@@ -42,17 +42,39 @@ function get_backtest_results($strategy = null) {
     foreach ($files as $file) {
         $content = json_decode(file_get_contents($file), true);
 
-        // Si une stratégie est spécifiée, filtrer les résultats
-        if ($strategy !== null && $content['strategy'] != $strategy) {
+        // Vérifier que le fichier a été correctement décodé
+        if ($content === null) {
             continue;
         }
+
+        // Si une stratégie est spécifiée, filtrer les résultats
+        if ($strategy !== null && isset($content['strategy']) && $content['strategy'] != $strategy) {
+            continue;
+        }
+
+        // S'assurer que les champs nécessaires existent pour éviter les erreurs
+        if (!isset($content['equity_curve'])) {
+            $content['equity_curve'] = [];
+        }
+
+        if (!isset($content['trades'])) {
+            $content['trades'] = [];
+        }
+
+        // Autres vérifications de sécurité
+        $content['profit'] = isset($content['profit']) ? $content['profit'] : 0;
+        $content['profit_pct'] = isset($content['profit_pct']) ? $content['profit_pct'] : 0;
+        $content['win_rate'] = isset($content['win_rate']) ? $content['win_rate'] : 0;
+        $content['max_drawdown'] = isset($content['max_drawdown']) ? $content['max_drawdown'] : 0;
 
         $results[] = $content;
     }
 
     // Trier par profit
     usort($results, function($a, $b) {
-        return $b['profit_pct'] - $a['profit_pct'];
+        $a_profit = isset($a['profit_pct']) ? $a['profit_pct'] : 0;
+        $b_profit = isset($b['profit_pct']) ? $b['profit_pct'] : 0;
+        return $b_profit - $a_profit;
     });
 
     return $results;

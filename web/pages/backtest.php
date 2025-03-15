@@ -424,13 +424,27 @@
                         updateStrategyParams(strategy);
                     });
 
-                    // Afficher les détails du backtest
+// Afficher les détails du backtest - Version améliorée avec gestion des erreurs
                     $('.view-result-btn').on('click', function() {
-                        const resultData = JSON.parse($(this).data('result'));
-                        displayBacktestResult(resultData);
-                    });
+                        try {
+                            // Récupérer la chaîne JSON brute
+                            const resultDataString = $(this).attr('data-result');
 
-                    // Utiliser une stratégie depuis la liste des résultats
+                            // Prétraiter les timestamps pour s'assurer qu'ils sont traités comme des nombres
+                            const processedDataString = resultDataString.replace(/"timestamp":"(\d+)"/g, '"timestamp":$1');
+
+                            // Parser la chaîne JSON
+                            const resultData = JSON.parse(processedDataString);
+
+                            // Afficher les détails
+                            displayBacktestResult(resultData);
+                        } catch (error) {
+                            console.error("Erreur lors du parsing des données de backtest:", error);
+                            console.log("Données brutes:", $(this).attr('data-result'));
+                            alert("Une erreur s'est produite lors du chargement des détails. Consultez la console pour plus d'informations.");
+                        }
+                    });
+                                        // Utiliser une stratégie depuis la liste des résultats
                     $('.use-strategy-btn').on('click', function() {
                         const strategy = $(this).data('strategy');
                         const params = JSON.parse($(this).data('params'));
@@ -560,31 +574,44 @@
                     $container.html(html);
                 }
 
-                // Afficher les détails d'un résultat de backtest
+                // Fonction d'affichage des détails du backtest
                 function displayBacktestResult(data) {
+                    console.log("Données du backtest (après parsing):", data);
+
+                    // Vérifier si les données sont valides
+                    if (!data || typeof data !== 'object') {
+                        console.error("Format de données invalide:", data);
+                        alert("Format de données invalide. Consultez la console pour plus d'informations.");
+                        return;
+                    }
+
                     // Remplir les informations
-                    $('#result-strategy').text(data.strategy);
-                    $('#result-initial-balance').text(data.initial_balance + ' USDT');
-                    $('#result-final-balance').text(data.final_balance + ' USDT');
-                    $('#result-profit').text(data.profit_pct + '% (' + data.profit + ' USDT)');
-                    $('#result-trades').text(data.total_trades + ' (' + data.winning_trades + ' gagnants, ' + data.losing_trades + ' perdants)');
-                    $('#result-win-rate').text(data.win_rate + '%');
-                    $('#result-profit-factor').text(data.profit_factor);
-                    $('#result-max-drawdown').text(data.max_drawdown + '%');
-                    $('#result-fees').text(data.fees_paid + ' USDT');
+                    $('#result-strategy').text(data.strategy || "");
+                    $('#result-initial-balance').text((data.initial_balance || 0) + ' USDT');
+                    $('#result-final-balance').text((data.final_balance || 0) + ' USDT');
+                    $('#result-profit').text(((data.profit_pct || 0).toFixed(2)) + '% (' + ((data.profit || 0).toFixed(2)) + ' USDT)');
+                    $('#result-trades').text((data.total_trades || 0) + ' (' + (data.winning_trades || 0) + ' gagnants, ' + (data.losing_trades || 0) + ' perdants)');
+                    $('#result-win-rate').text(((data.win_rate || 0).toFixed(2)) + '%');
+                    $('#result-profit-factor').text((data.profit_factor || 0).toFixed(2));
+                    $('#result-max-drawdown').text(((data.max_drawdown || 0).toFixed(2)) + '%');
+                    $('#result-fees').text(((data.fees_paid || 0).toFixed(2)) + ' USDT');
 
                     // Remplir les paramètres
                     const $paramsTable = $('#result-parameters-table');
                     $paramsTable.empty();
 
-                    Object.keys(data.parameters).forEach(key => {
-                        $paramsTable.append(`
-            <tr>
-                <th>${key}:</th>
-                <td>${data.parameters[key]}</td>
-            </tr>
-        `);
-                    });
+                    if (data.parameters) {
+                        Object.keys(data.parameters).forEach(key => {
+                            $paramsTable.append(`
+                <tr>
+                    <th>${key}:</th>
+                    <td>${data.parameters[key]}</td>
+                </tr>
+            `);
+                        });
+                    } else {
+                        $paramsTable.append('<tr><td colspan="2" class="text-center">Aucun paramètre disponible</td></tr>');
+                    }
 
                     // Remplir les trades
                     const $tradesTable = $('#result-trades-table tbody');
@@ -595,15 +622,19 @@
                             const profitClass = trade.profit > 0 ? 'text-success' : 'text-danger';
                             const tradeType = trade.profit > 0 ? '<span class="badge bg-success">GAIN</span>' : '<span class="badge bg-danger">PERTE</span>';
 
+                            // Convertir les timestamps en nombre si nécessaire
+                            const entryTime = typeof trade.entry_time === 'string' ? parseInt(trade.entry_time) : trade.entry_time;
+                            const exitTime = typeof trade.exit_time === 'string' ? parseInt(trade.exit_time) : trade.exit_time;
+
                             $tradesTable.append(`
                 <tr>
-                    <td>${new Date(trade.entry_time).toLocaleString()}</td>
-                    <td>${new Date(trade.exit_time).toLocaleString()}</td>
+                    <td>${new Date(entryTime).toLocaleString()}</td>
+                    <td>${new Date(exitTime).toLocaleString()}</td>
                     <td>${tradeType}</td>
-                    <td>${trade.entry_price.toFixed(2)}</td>
-                    <td>${trade.exit_price.toFixed(2)}</td>
-                    <td class="${profitClass}">${trade.profit_pct.toFixed(2)}% (${trade.profit.toFixed(2)} USDT)</td>
-                    <td>${trade.duration.toFixed(1)}h</td>
+                    <td>${parseFloat(trade.entry_price).toFixed(2)}</td>
+                    <td>${parseFloat(trade.exit_price).toFixed(2)}</td>
+                    <td class="${profitClass}">${parseFloat(trade.profit_pct).toFixed(2)}% (${parseFloat(trade.profit).toFixed(2)} USDT)</td>
+                    <td>${parseFloat(trade.duration).toFixed(1)}h</td>
                 </tr>
             `);
                         });
@@ -617,8 +648,10 @@
                         const equityData = [];
 
                         data.equity_curve.forEach(point => {
-                            labels.push(new Date(point.timestamp).toLocaleDateString());
-                            equityData.push(point.equity);
+                            // S'assurer que les timestamps sont traités comme des nombres
+                            const timestamp = typeof point.timestamp === 'string' ? parseInt(point.timestamp) : point.timestamp;
+                            labels.push(new Date(timestamp).toLocaleDateString());
+                            equityData.push(parseFloat(point.equity));
                         });
 
                         backtestData = {
@@ -662,7 +695,7 @@
                                 plugins: {
                                     tooltip: {
                                         callbacks: {
-                                            label: function(context) {
+                                            label: function (context) {
                                                 return context.parsed.y.toFixed(2) + ' USDT';
                                             }
                                         }

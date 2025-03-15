@@ -172,14 +172,14 @@ class BacktestEngine {
             return $trade['profit'] <= 0;
         });
 
-        $winRate = (count($winningTrades) / $totalTrades) * 100;
+        $winRate = $totalTrades > 0 ? (count($winningTrades) / $totalTrades) * 100 : 0;
 
         $profitFactor = 0;
-        $totalProfit = 0;
+        $totalGain = 0;
         $totalLoss = 0;
 
         foreach ($winningTrades as $trade) {
-            $totalProfit += $trade['profit'];
+            $totalGain += $trade['profit'];
         }
 
         foreach ($losingTrades as $trade) {
@@ -187,7 +187,7 @@ class BacktestEngine {
         }
 
         if ($totalLoss > 0) {
-            $profitFactor = $totalProfit / $totalLoss;
+            $profitFactor = $totalGain / $totalLoss;
         }
 
         // Calculer le drawdown maximum
@@ -211,6 +211,12 @@ class BacktestEngine {
             }
         }
 
+        // Calculer les frais payés
+        $feesPaid = 0;
+        foreach ($this->trades as $trade) {
+            $feesPaid += isset($trade['fees']) ? $trade['fees'] : 0;
+        }
+
         // Résultats du backtest
         return [
             'strategy' => $this->strategy->getName(),
@@ -225,7 +231,7 @@ class BacktestEngine {
             'win_rate' => $winRate,
             'profit_factor' => $profitFactor,
             'max_drawdown' => $maxDrawdown,
-            'fees_paid' => $this->fees,
+            'fees_paid' => $feesPaid,
             'duration' => $duration,
             'trades' => $this->trades,
             'equity_curve' => $this->equity
