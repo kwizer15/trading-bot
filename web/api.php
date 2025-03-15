@@ -99,9 +99,15 @@ switch ($action) {
             }
 
             $strategy = $_POST['strategy'];
+            $symbol = isset($_POST['symbol']) ? $_POST['symbol'] : 'BTCUSDT';
+            $period_start = isset($_POST['period_start']) ? $_POST['period_start'] : date('Y-m-d', strtotime('-1 year'));
+            $period_end = isset($_POST['period_end']) ? $_POST['period_end'] : date('Y-m-d');
+            $initial_balance = isset($_POST['initial_balance']) ? floatval($_POST['initial_balance']) : 1000;
+            $download_data = isset($_POST['download_data']) && $_POST['download_data'] == '1';
+
+            // Récupérer les paramètres de stratégie
             $params = [];
 
-            // Récupérer les paramètres
             foreach ($_POST as $key => $value) {
                 if (strpos($key, 'param_') === 0) {
                     $param_name = substr($key, 6);
@@ -109,9 +115,40 @@ switch ($action) {
                 }
             }
 
-            // Construire la commande
-            $command = 'php ' . BOT_PATH . '/backtest.php ' . escapeshellarg($strategy);
+            // Modifier temporairement la configuration pour le backtest
+            $config_file = BOT_PATH . '/config/config.php';
+            $current_config = require $config_file;
+            $backtest_config = $current_config;
 
+            // Mettre à jour la configuration pour le backtest
+            $backtest_config['backtest']['start_date'] = $period_start;
+            $backtest_config['backtest']['end_date'] = $period_end;
+            $backtest_config['backtest']['initial_balance'] = $initial_balance;
+
+            // Sauvegarder temporairement la configuration
+            $temp_config_file = BOT_PATH . '/config/temp_backtest_config.php';
+            file_put_contents($temp_config_file, '<?php return ' . var_export($backtest_config, true) . ';');
+
+            // Préparer le dossier pour les données historiques
+            $data_dir = BOT_PATH . '/data/historical';
+            if (!is_dir($data_dir)) {
+                mkdir($data_dir, 0777, true);
+            }
+
+            // Construire la commande
+            $command = 'cd ' . BOT_PATH . ' && php backtest.php ' . escapeshellarg($strategy);
+
+            // Ajouter le flag de téléchargement si nécessaire
+            if ($download_data) {
+                $command .= ' --download';
+            }
+
+            // Ajouter le symbole si spécifié
+            if ($symbol) {
+                $command .= ' --symbol=' . escapeshellarg($symbol);
+            }
+
+            // Ajouter les paramètres
             if (!empty($params)) {
                 $command .= ' --params';
                 foreach ($params as $key => $value) {
@@ -119,15 +156,25 @@ switch ($action) {
                 }
             }
 
+            // Ajouter le chemin de la configuration temporaire
+            $command .= ' --config=' . escapeshellarg($temp_config_file);
+
             // Exécuter la commande
             $output = [];
             $return_var = 0;
             exec($command . ' 2>&1', $output, $return_var);
 
+            // Supprimer la configuration temporaire
+            if (file_exists($temp_config_file)) {
+                unlink($temp_config_file);
+            }
+
             if ($return_var !== 0) {
                 send_json_response([
                     'success' => false,
-                    'message' => 'Erreur lors de l\'exécution du backtest: ' . implode("\n", $output)
+                    'message' => 'Erreur lors de l\'exécution du backtest: ' . implode("\n", $output),
+                    'command' => $command,
+                    'output' => $output
                 ]);
             }
 
