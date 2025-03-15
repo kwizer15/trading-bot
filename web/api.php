@@ -1,4 +1,7 @@
 <?php
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
 // API pour les requêtes AJAX
 session_start();
 

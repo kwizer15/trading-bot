@@ -1,4 +1,7 @@
 <?php
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
 // Point d'entrée principal de l'interface web
 session_start();
 

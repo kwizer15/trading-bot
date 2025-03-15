@@ -1,5 +1,7 @@
 <?php
 
+require dirname(__DIR__) . '/vendor/autoload.php';
+
 // Inclure les fichiers nécessaires
 require_once __DIR__ . '/src/BinanceAPI.php';
 require_once __DIR__ . '/src/Strategy/StrategyInterface.php';

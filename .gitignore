@@ -1,0 +1,7 @@
+/vendor/
+/data/*
+/logs/*
+/web/assets/*
+!/web/assets/js/dashboard.js
+!/web/assets/css/dashboard.css
+/web/.htaccess

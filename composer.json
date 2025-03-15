@@ -1,0 +1,21 @@
+{
+    "name": "kwizer15/trading-bot",
+    "description": "Custom trading bot",
+    "type": "project",
+    "require-dev": {
+        "phpstan/phpstan": "^2.1"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Kwizer15\\TradingBot\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Emmanuel Bernaszuk",
+            "email": "ebernaszuk@nodevo.com"
+        }
+    ],
+    "require": {}
+}
