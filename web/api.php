@@ -171,7 +171,7 @@ switch ($action) {
             }
 
             // Construire la commande
-            $command = 'cd ' . BOT_PATH . ' && php backtest.php ' . escapeshellarg($strategy);
+            $command = 'cd ' . BOT_PATH . ' && php backtest.php --strategy=' . escapeshellarg($strategy);
 
             // Ajouter le flag de téléchargement si nécessaire
             if ($download_data) {
@@ -273,19 +273,39 @@ switch ($action) {
             $config_file = BOT_PATH . '/config/config.php';
             $current_config = require $config_file;
 
-            // Mettre à jour la configuration
-            foreach ($_POST as $key => $value) {
-                // Traiter les clés imbriquées (ex: trading[base_currency])
-                if (strpos($key, '[') !== false && strpos($key, ']') !== false) {
-                    preg_match('/^([^\[]+)\[([^\]]+)\]$/', $key, $matches);
-                    if (count($matches) === 3) {
-                        $section = $matches[1];
-                        $option = $matches[2];
+            foreach ($_POST as $section => $values) {
+                // Ignorer l'action du formulaire
+                if ($section === 'action') {
+                    continue;
+                }
 
-                        if (isset($current_config[$section])) {
-                            $current_config[$section][$option] = is_numeric($value) ? (float) $value : $value;
+                // S'assurer que la section existe dans la configuration
+                if (!isset($current_config[$section])) {
+                    $current_config[$section] = [];
+                }
+
+                // Si c'est un tableau, fusionner avec la configuration existante
+                if (is_array($values)) {
+                    foreach ($values as $key => $value) {
+                        // Convertir les valeurs numériques
+                        if (is_numeric($value)) {
+                            $value = strpos($value, '.') !== false ? (float)$value : (int)$value;
+                        } else if ($value === '1') {
+                            $value = true;
+                        } else if ($value === '0') {
+                            $value = false;
+                        }
+
+                        // Traitement spécial pour les tableaux (comme trading[symbols])
+                        if (is_array($value)) {
+                            $current_config[$section][$key] = $value;
+                        } else {
+                            $current_config[$section][$key] = $value;
                         }
                     }
+                } else {
+                    // Clé simple
+                    $current_config[$section] = $values;
                 }
             }
 

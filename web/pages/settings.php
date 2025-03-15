@@ -176,7 +176,7 @@
                 <!-- Email -->
                 <div class="mb-3 form-check">
                     <input type="checkbox" class="form-check-input" id="email-notifications" name="notifications[email][enabled]"
-                           value="1" <?php echo get_config('notifications')['email']['enabled'] ? 'checked' : ''; ?>>
+                           value="1" <?php echo (get_config('notifications')['email']['enabled'] ?? false) ? 'checked' : ''; ?>>
                     <label class="form-check-label" for="email-notifications">Activer les notifications par email</label>
                 </div>
                 <div class="mb-3">
@@ -188,7 +188,7 @@
                 <!-- Telegram -->
                 <div class="mb-3 form-check">
                     <input type="checkbox" class="form-check-input" id="telegram-notifications" name="notifications[telegram][enabled]"
-                           value="1" <?php echo get_config('notifications')['telegram']['enabled'] ? 'checked' : ''; ?>>
+                           value="1" <?php echo (get_config('notifications')['telegram']['enabled'] ?? false) ? 'checked' : ''; ?>>
                     <label class="form-check-label" for="telegram-notifications">Activer les notifications Telegram</label>
                 </div>
                 <div class="row mb-3">

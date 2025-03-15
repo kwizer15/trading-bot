@@ -1,5 +1,7 @@
 <?php
 
+namespace Kwizer15\TradingBot;
+
 class BinanceAPI {
     private $apiKey;
     private $apiSecret;
@@ -205,7 +207,7 @@ class BinanceAPI {
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         if (curl_errno($ch)) {
-            throw new Exception('Erreur Curl: ' . curl_error($ch));
+            throw new \Exception('Erreur Curl: ' . curl_error($ch));
         }
 
         curl_close($ch);
@@ -214,7 +216,7 @@ class BinanceAPI {
 
         if ($httpCode >= 400) {
             $errorMsg = isset($decodedResponse['msg']) ? $decodedResponse['msg'] : 'Erreur API inconnue';
-            throw new Exception('Erreur API Binance: ' . $errorMsg . ' (Code: ' . $httpCode . ')');
+            throw new \Exception('Erreur API Binance: ' . $errorMsg . ' (Code: ' . $httpCode . ')');
         }
 
         return $decodedResponse;

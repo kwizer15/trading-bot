@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/StrategyInterface.php';
+namespace Kwizer15\TradingBot\Strategy;
 
 class RSIStrategy implements StrategyInterface {
     private $params = [
@@ -17,7 +17,7 @@ class RSIStrategy implements StrategyInterface {
         $count = count($data);
 
         if ($count < $period + 1) {
-            throw new Exception("Pas assez de données pour calculer le RSI de période {$period}");
+            throw new \Exception("Pas assez de données pour calculer le RSI de période {$period}");
         }
 
         $gains = 0;
@@ -71,7 +71,7 @@ class RSIStrategy implements StrategyInterface {
             // Signal d'achat : RSI était en dessous du niveau de survente et remonte maintenant
             return ($previousRSI < $this->params['oversold']) && ($currentRSI > $this->params['oversold']);
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             // En cas d'erreur, ne pas générer de signal d'achat
             return false;
         }
@@ -96,7 +96,7 @@ class RSIStrategy implements StrategyInterface {
             // Signal de vente : RSI était au-dessus du niveau de surachat et redescend maintenant
             return ($previousRSI > $this->params['overbought']) && ($currentRSI < $this->params['overbought']);
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             // En cas d'erreur, ne pas générer de signal de vente
             return false;
         }

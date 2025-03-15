@@ -1,5 +1,9 @@
 <?php
 
+namespace Kwizer15\TradingBot\Backtest;
+
+use Kwizer15\TradingBot\Strategy\StrategyInterface;
+
 class BacktestEngine {
     private $strategy;
     private $data;

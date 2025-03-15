@@ -1,5 +1,9 @@
 <?php
 
+namespace Kwizer15\TradingBot;
+
+use Kwizer15\TradingBot\Strategy\StrategyInterface;
+
 class TradingBot {
     private $binanceAPI;
     private $strategy;
@@ -104,7 +108,7 @@ class TradingBot {
 
                 $this->log('info', "Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
 
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 $this->log('error', "Erreur lors de la gestion de la position {$symbol}: " . $e->getMessage());
             }
         }
@@ -146,7 +150,7 @@ class TradingBot {
                         break;
                     }
                 }
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 $this->log('error', "Erreur lors de la recherche d'opportunités pour {$pairSymbol}: " . $e->getMessage());
             }
         }
@@ -208,7 +212,7 @@ class TradingBot {
 
             return true;
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             $this->log('error', "Erreur lors de l'achat de {$symbol}: " . $e->getMessage());
             return false;
         }
@@ -246,7 +250,7 @@ class TradingBot {
 
             return true;
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             $this->log('error', "Erreur lors de la vente de {$symbol}: " . $e->getMessage());
             return false;
         }

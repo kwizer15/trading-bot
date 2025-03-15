@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/StrategyInterface.php';
+namespace Kwizer15\TradingBot\Strategy;
 
 class MovingAverageStrategy implements StrategyInterface {
     private $params = [
@@ -16,7 +16,7 @@ class MovingAverageStrategy implements StrategyInterface {
         $count = count($data);
 
         if ($count < $period) {
-            throw new Exception("Pas assez de données pour calculer la SMA de période {$period}");
+            throw new \Exception("Pas assez de données pour calculer la SMA de période {$period}");
         }
 
         $sum = 0;
@@ -55,7 +55,7 @@ class MovingAverageStrategy implements StrategyInterface {
             // SMA courte était sous la SMA longue et est maintenant au-dessus
             return ($shortSMA_previous < $longSMA_previous) && ($shortSMA_current > $longSMA_current);
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             // En cas d'erreur, ne pas générer de signal d'achat
             return false;
         }
@@ -87,7 +87,7 @@ class MovingAverageStrategy implements StrategyInterface {
             // SMA courte était au-dessus de la SMA longue et est maintenant en-dessous
             return ($shortSMA_previous > $longSMA_previous) && ($shortSMA_current < $longSMA_current);
 
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             // En cas d'erreur, ne pas générer de signal de vente
             return false;
         }

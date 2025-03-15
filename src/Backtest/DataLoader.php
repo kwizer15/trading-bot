@@ -1,5 +1,9 @@
 <?php
 
+namespace Kwizer15\TradingBot\Backtest;
+
+use Kwizer15\TradingBot\BinanceAPI;
+
 class DataLoader {
     private $binanceAPI;
 
