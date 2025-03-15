@@ -1,0 +1,232 @@
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.feather {
+    width: 16px;
+    height: 16px;
+    vertical-align: text-bottom;
+}
+
+/*
+ * Sidebar
+ */
+
+.sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 100; /* Behind the navbar */
+    padding: 48px 0 0; /* Height of navbar */
+    box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+}
+
+@media (max-width: 767.98px) {
+    .sidebar {
+        top: 5rem;
+    }
+}
+
+.sidebar-sticky {
+    position: relative;
+    top: 0;
+    height: calc(100vh - 48px);
+    padding-top: .5rem;
+    overflow-x: hidden;
+    overflow-y: auto; /* Scrollable contents if viewport is shorter than content. */
+}
+
+.sidebar .nav-link {
+    font-weight: 500;
+    color: #333;
+}
+
+.sidebar .nav-link.active {
+    color: #2470dc;
+}
+
+.sidebar-heading {
+    font-size: .75rem;
+    text-transform: uppercase;
+}
+
+/*
+ * Navbar
+ */
+
+.navbar-brand {
+    padding-top: .75rem;
+    padding-bottom: .75rem;
+    font-size: 1rem;
+    background-color: rgba(0, 0, 0, .25);
+    box-shadow: inset -1px 0 0 rgba(0, 0, 0, .25);
+}
+
+/*
+ * Content
+ */
+
+.content-wrapper {
+    flex: 1;
+}
+
+/*
+ * Status indicators
+ */
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #6c757d;
+}
+
+.status-indicator.running {
+    background-color: #28a745;
+}
+
+.status-indicator.stopped {
+    background-color: #dc3545;
+}
+
+.status-indicator.idle {
+    background-color: #ffc107;
+}
+
+.status-indicator.error {
+    background-color: #dc3545;
+}
+
+/*
+ * Cards
+ */
+
+.card-stats {
+    border-left: 4px solid #0d6efd;
+}
+
+.card-stats.card-profit {
+    border-left-color: #28a745;
+}
+
+.card-stats.card-loss {
+    border-left-color: #dc3545;
+}
+
+.card-stats.card-neutral {
+    border-left-color: #6c757d;
+}
+
+.card-stats .card-icon {
+    font-size: 2rem;
+    color: #6c757d;
+}
+
+.card-stats .card-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    font-weight: bold;
+    color: #6c757d;
+}
+
+.card-stats .card-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+/*
+ * Tables
+ */
+
+.table-positions th, .table-trades th {
+    font-size: 0.9rem;
+}
+
+.table-positions td, .table-trades td {
+    vertical-align: middle;
+}
+
+/*
+ * Charts
+ */
+
+.chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
+/*
+ * Footer
+ */
+
+.footer {
+    background-color: #f8f9fa;
+    padding: 1rem 0;
+    margin-top: auto;
+}
+
+/*
+ * Forms
+ */
+
+.form-settings label {
+    font-weight: 500;
+}
+
+.form-settings .form-text {
+    font-size: 0.8rem;
+}
+
+/*
+ * Loading spinner
+ */
+
+.loading-spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 0.2em solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spinner-border .75s linear infinite;
+}
+
+/*
+ * Logs
+ */
+
+.log-container {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.log-line {
+    font-family: monospace;
+    white-space: pre-wrap;
+    font-size: 0.85rem;
+    padding: 2px 5px;
+    margin-bottom: 1px;
+    border-radius: 3px;
+}
+
+.log-line-info {
+    background-color: #f8f9fa;
+}
+
+.log-line-debug {
+    color: #6c757d;
+    background-color: #f8f9fa;
+}
+
+.log-line-warning {
+    background-color: #fff3cd;
+}
+
+.log-line-error {
+    color: #721c24;
+    background-color: #f8d7da;
+}
