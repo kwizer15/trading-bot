@@ -1,6 +1,7 @@
 <?php
 
 namespace Kwizer15\TradingBot\Strategy;
+
 interface StrategyInterface {
     /**
      * Analyse les données du marché et détermine si un signal d'achat est présent
@@ -18,6 +19,15 @@ interface StrategyInterface {
      * @return bool True si un signal de vente est détecté, sinon False
      */
     public function shouldSell(array $marketData, array $position): bool;
+
+    /**
+     * Détermine l'action à effectuer sur une position
+     *
+     * @param array $marketData Données du marché (klines)
+     * @param array $position Informations sur la position ouverte
+     * @return string Action à effectuer ('SELL', 'INCREASE_POSITION', 'PARTIAL_EXIT', ou 'HOLD')
+     */
+    public function getPositionAction(array $marketData, array $position): string;
 
     /**
      * Obtient le nom de la stratégie

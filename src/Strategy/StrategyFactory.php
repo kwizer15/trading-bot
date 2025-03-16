@@ -13,6 +13,8 @@ final class StrategyFactory
                 return new RSIStrategy();
             case 'MovingAverageStrategy':
                 return new MovingAverageStrategy();
+            case 'DynamicPositionStrategy':
+                return new DynamicPositionStrategy();
             default:
                 throw new \Exception('Stratégie non supportée');
         }

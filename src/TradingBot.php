@@ -38,29 +38,152 @@ class TradingBot {
     }
 
     /**
-     * Charge les positions actuelles depuis un fichier
+     * Augmente une position existante
+     * @param string $symbol Symbole de la paire
+     * @param float $additionalInvestment Montant supplémentaire à investir
+     * @return bool Succès de l'opération
      */
-    private function loadPositions() {
-        $positionsFile = __DIR__ . '/../data/positions.json';
+    public function increasPosition($symbol, $additionalInvestment) {
+        try {
+            // Vérifier si nous avons cette position
+            if (!isset($this->positions[$symbol])) {
+                $this->log('warning', "Impossible d'augmenter la position, aucune position trouvée pour {$symbol}");
+                return false;
+            }
 
-        if (file_exists($positionsFile)) {
-            $this->positions = json_decode(file_get_contents($positionsFile), true);
-            $this->log('info', 'Positions chargées: ' . count($this->positions));
-        } else {
-            $this->log('info', 'Aucune position existante trouvée');
+            $position = $this->positions[$symbol];
+
+            // Vérifier le solde disponible
+            $balance = $this->binanceAPI->getBalance($this->config['trading']['base_currency']);
+
+            if ($balance['free'] < $additionalInvestment) {
+                $this->log('warning', "Solde insuffisant pour augmenter la position {$symbol}");
+                return false;
+            }
+
+            // Obtenir le prix actuel
+            $currentPrice = $this->binanceAPI->getCurrentPrice($symbol);
+
+            if (!$currentPrice) {
+                $this->log('error', "Impossible d'obtenir le prix actuel pour {$symbol}");
+                return false;
+            }
+
+            // Calculer la quantité à acheter
+            $additionalQuantity = $additionalInvestment / $currentPrice;
+
+            // Arrondir la quantité selon les règles de Binance
+            $additionalQuantity = floor($additionalQuantity * 100000) / 100000;
+
+            // Exécuter l'ordre d'achat
+            $order = $this->binanceAPI->buyMarket($symbol, $additionalQuantity);
+
+            if (!$order || !isset($order['orderId'])) {
+                $this->log('error', "Erreur lors de l'augmentation de la position {$symbol}: " . json_encode($order));
+                return false;
+            }
+
+            // Mettre à jour la position
+            $newQuantity = $position['quantity'] + $additionalQuantity;
+            $newCost = $position['cost'] + $additionalInvestment;
+            $newEntryPrice = $newCost / $newQuantity;
+
+            $this->positions[$symbol] = [
+                'symbol' => $symbol,
+                'entry_price' => $newEntryPrice,
+                'quantity' => $newQuantity,
+                'timestamp' => $position['timestamp'],
+                'cost' => $newCost,
+                'current_price' => $currentPrice,
+                'current_value' => $newQuantity * $currentPrice,
+                'profit_loss' => ($newQuantity * $currentPrice) - $newCost,
+                'profit_loss_pct' => ((($newQuantity * $currentPrice) - $newCost) / $newCost) * 100,
+                'order_id' => $position['order_id']
+            ];
+
+            // Sauvegarder les positions
+            $this->savePositions();
+
+            $this->log('info', "Position augmentée pour {$symbol}: +{$additionalQuantity} au prix de {$currentPrice}");
+
+            return true;
+
+        } catch (\Exception $e) {
+            $this->log('error', "Erreur lors de l'augmentation de la position {$symbol}: " . $e->getMessage());
+            return false;
         }
     }
 
     /**
-     * Sauvegarde les positions actuelles dans un fichier
+     * Exécute une sortie partielle de position
+     * @param string $symbol Symbole de la paire
+     * @param float $exitPercentage Pourcentage de la position à vendre
+     * @return bool Succès de l'opération
      */
-    private function savePositions() {
-        $positionsFile = __DIR__ . '/../data/positions.json';
-        file_put_contents($positionsFile, json_encode($this->positions, JSON_PRETTY_PRINT));
+    public function partialExit($symbol, $exitPercentage) {
+        try {
+            // Vérifier si nous avons cette position
+            if (!isset($this->positions[$symbol])) {
+                $this->log('warning', "Impossible de réaliser une sortie partielle, aucune position trouvée pour {$symbol}");
+                return false;
+            }
+
+            $position = $this->positions[$symbol];
+
+            // Calculer la quantité à vendre
+            $quantityToSell = $position['quantity'] * ($exitPercentage / 100);
+
+            // Arrondir la quantité selon les règles de Binance
+            $quantityToSell = floor($quantityToSell * 100000) / 100000;
+
+            // Vérifier que la quantité à vendre est suffisante
+            if ($quantityToSell <= 0) {
+                $this->log('warning', "Quantité de sortie trop faible pour {$symbol}");
+                return false;
+            }
+
+            // Exécuter l'ordre de vente partielle
+            $order = $this->binanceAPI->sellMarket($symbol, $quantityToSell);
+
+            if (!$order || !isset($order['orderId'])) {
+                $this->log('error', "Erreur lors de la vente partielle de {$symbol}: " . json_encode($order));
+                return false;
+            }
+
+            // Mettre à jour la position
+            $remainingQuantity = $position['quantity'] - $quantityToSell;
+            $soldValue = $quantityToSell * $position['current_price'];
+            $remainingCost = $position['cost'] * ($remainingQuantity / $position['quantity']);
+
+            $this->positions[$symbol] = [
+                'symbol' => $symbol,
+                'entry_price' => $position['entry_price'],
+                'quantity' => $remainingQuantity,
+                'timestamp' => $position['timestamp'],
+                'cost' => $remainingCost,
+                'current_price' => $position['current_price'],
+                'current_value' => $remainingQuantity * $position['current_price'],
+                'profit_loss' => ($remainingQuantity * $position['current_price']) - $remainingCost,
+                'profit_loss_pct' => ((($remainingQuantity * $position['current_price']) - $remainingCost) / $remainingCost) * 100,
+                'order_id' => $position['order_id']
+            ];
+
+            // Sauvegarder les positions
+            $this->savePositions();
+
+            $this->log('info', "Sortie partielle réussie pour {$symbol}: {$quantityToSell} vendus au prix de {$position['current_price']}");
+
+            return true;
+
+        } catch (\Exception $e) {
+            $this->log('error', "Erreur lors de la sortie partielle de {$symbol}: " . $e->getMessage());
+            return false;
+        }
     }
 
     /**
-     * Gère les positions ouvertes (vérifie si on doit vendre)
+     * Gère les positions ouvertes avec support pour actions spéciales
+     * Cette méthode remplace ou complète la méthode managePositions() existante
      */
     private function managePositions() {
         foreach ($this->positions as $symbol => $position) {
@@ -86,29 +209,57 @@ class TradingBot {
 
                 $this->positions[$symbol] = $position;
 
-                // Vérifier le stop loss
+                // Vérifier le stop loss général
                 if ($position['profit_loss_pct'] <= -$this->config['trading']['stop_loss_percentage']) {
                     $this->log('info', "Stop loss déclenché pour {$symbol} (perte: {$position['profit_loss_pct']}%)");
                     $this->sell($symbol);
                     continue;
                 }
 
-                // Vérifier le take profit
+                // Vérifier le take profit général
                 if ($position['profit_loss_pct'] >= $this->config['trading']['take_profit_percentage']) {
                     $this->log('info', "Take profit déclenché pour {$symbol} (gain: {$position['profit_loss_pct']}%)");
                     $this->sell($symbol);
                     continue;
                 }
 
-                // Vérifier le signal de vente de la stratégie
-                if ($this->strategy->shouldSell($klines, $position)) {
-                    $this->log('info', "Signal de vente détecté pour {$symbol}");
-                    $this->sell($symbol);
-                    continue;
+                // Vérifier si la stratégie supporte les actions spéciales
+                if (method_exists($this->strategy, 'getPositionAction')) {
+                    $action = $this->strategy->getPositionAction($klines, $position);
+
+                    switch ($action) {
+                        case 'SELL':
+                            $this->log('info', "Signal de vente détecté pour {$symbol}");
+                            $this->sell($symbol);
+                            break;
+
+                        case 'INCREASE_POSITION':
+                            $additionalInvestment = $this->calculateAdditionalInvestment($position);
+                            $this->log('info', "Signal d'augmentation de position pour {$symbol}");
+                            $this->increasPosition($symbol, $additionalInvestment);
+                            break;
+
+                        case 'PARTIAL_EXIT':
+                            $exitPercentage = $this->calculateExitPercentage($position);
+                            $this->log('info', "Signal de sortie partielle pour {$symbol}");
+                            $this->partialExit($symbol, $exitPercentage);
+                            break;
+
+                        case 'HOLD':
+                        default:
+                            $this->log('info', "Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
+                            break;
+                    }
+                } else {
+                    // Utiliser l'approche classique shouldSell
+                    if ($this->strategy->shouldSell($klines, $position)) {
+                        $this->log('info', "Signal de vente détecté pour {$symbol}");
+                        $this->sell($symbol);
+                        continue;
+                    }
+
+                    $this->log('info', "Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
                 }
-
-                $this->log('info', "Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
-
             } catch (\Exception $e) {
                 $this->log('error', "Erreur lors de la gestion de la position {$symbol}: " . $e->getMessage());
             }
@@ -116,6 +267,53 @@ class TradingBot {
 
         // Sauvegarder les positions mises à jour
         $this->savePositions();
+    }
+
+    /**
+     * Calcule le montant supplémentaire à investir pour une position existante
+     * @param array $position Données de la position
+     * @return float Montant à investir
+     */
+    private function calculateAdditionalInvestment($position) {
+        // Par défaut, on augmente de 50% de l'investissement initial
+        $baseAmount = $this->config['trading']['investment_per_trade'];
+        $percentIncrease = isset($this->config['trading']['position_increase_pct']) ?
+            $this->config['trading']['position_increase_pct'] : 50;
+
+        return $baseAmount * ($percentIncrease / 100);
+    }
+
+    /**
+     * Calcule le pourcentage de la position à sortir lors d'une sortie partielle
+     * @param array $position Données de la position
+     * @return float Pourcentage à sortir
+     */
+    private function calculateExitPercentage($position) {
+        // Par défaut, on sort 30% de la position
+        return isset($this->config['trading']['partial_exit_pct']) ?
+            $this->config['trading']['partial_exit_pct'] : 30;
+    }
+
+    /**
+     * Charge les positions actuelles depuis un fichier
+     */
+    private function loadPositions() {
+        $positionsFile = __DIR__ . '/../data/positions.json';
+
+        if (file_exists($positionsFile)) {
+            $this->positions = json_decode(file_get_contents($positionsFile), true);
+            $this->log('info', 'Positions chargées: ' . count($this->positions));
+        } else {
+            $this->log('info', 'Aucune position existante trouvée');
+        }
+    }
+
+    /**
+     * Sauvegarde les positions actuelles dans un fichier
+     */
+    private function savePositions() {
+        $positionsFile = __DIR__ . '/../data/positions.json';
+        file_put_contents($positionsFile, json_encode($this->positions, JSON_PRETTY_PRINT));
     }
 
     /**
