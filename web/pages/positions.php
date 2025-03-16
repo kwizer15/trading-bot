@@ -50,6 +50,10 @@
                                     <th>Valeur actuelle</th>
                                     <th>P/L</th>
                                     <th>Actions</th>
+                                    <th>Entrée initiale</th>
+                                    <th>Entrées additionnelles</th>
+                                    <th>Sorties partielles</th>
+                                    <th>Stop-Loss actuel</th>
                                 </tr>
                                 </thead>
                                 <tbody>
@@ -71,6 +75,52 @@
                                             <button class="btn btn-sm btn-danger sell-btn" data-symbol="<?php echo $symbol; ?>">
                                                 Vendre
                                             </button>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            if (isset($position['strategy_data']) && $position['strategy_data']['initial_entry_price']) {
+                                                echo format_currency($position['strategy_data']['initial_investment']);
+                                            } else {
+                                                echo format_currency($position['cost']);
+                                            }
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            if (isset($position['strategy_data']) && !empty($position['strategy_data']['additional_entries'])) {
+                                                foreach ($position['strategy_data']['additional_entries'] as $entry) {
+                                                    echo date('d/m H:i', $entry['timestamp'] / 1000) . ': ';
+                                                    echo format_currency($entry['amount']) . '<br>';
+                                                }
+                                            } else {
+                                                echo '-';
+                                            }
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            if (isset($position['strategy_data']) && !empty($position['strategy_data']['partial_exits'])) {
+                                                foreach ($position['strategy_data']['partial_exits'] as $exit) {
+                                                    echo date('d/m H:i', $exit['timestamp'] / 1000) . ': ';
+                                                    echo format_currency($exit['amount']) . '<br>';
+                                                }
+                                            } else {
+                                                echo '-';
+                                            }
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            if (isset($position['strategy_data']) && isset($position['strategy_data']['stop_loss_price'])) {
+                                                echo format_number($position['strategy_data']['stop_loss_price'], 2);
+
+                                                // Calculer le pourcentage par rapport au prix actuel
+                                                $stopLossPercent = (($position['current_price'] - $position['strategy_data']['stop_loss_price']) / $position['current_price']) * 100;
+                                                echo '<br><small>' . format_percent($stopLossPercent) . ' du prix actuel</small>';
+                                            } else {
+                                                echo '-';
+                                            }
+                                            ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

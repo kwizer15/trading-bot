@@ -41,6 +41,7 @@
                                                 <option value="">Sélectionnez une stratégie</option>
                                                 <option value="MovingAverageStrategy">Moving Average Crossover</option>
                                                 <option value="RSIStrategy">RSI Strategy</option>
+                                                <option value="DynamicPositionStrategy">Dynamic Position Strategy</option>
                                             </select>
                                         </div>
                                         <div class="col-md-6">
@@ -173,6 +174,9 @@
                                                             <?php
                                                             $params = [];
                                                             foreach ($result['parameters'] as $key => $value) {
+                                                                if (is_array($value)) {
+                                                                    $value = json_encode($value);
+                                                                }
                                                                 $params[] = "{$key}: {$value}";
                                                             }
                                                             echo implode('<br>', $params);
@@ -410,6 +414,58 @@
                                 3: 'Low',
                                 4: 'Close'
                             }
+                        }
+                    },
+                    // Ajouter ce code au strategyParams dans le script de backtest.php
+                    DynamicPositionStrategy: {
+                        initial_stop_loss_pct: {
+                            type: 'number',
+                            label: 'Stop-Loss initial',
+                            default: 5.0,
+                            min: 0.5,
+                            max: 20.0,
+                            step: 0.5
+                        },
+                        analysis_period: {
+                            type: 'number',
+                            label: 'Période d\'analyse (heures)',
+                            default: 24,
+                            min: 1,
+                            max: 72,
+                            step: 1
+                        },
+                        partial_take_profit: {
+                            type: 'select',
+                            label: 'Prise de profit partielle',
+                            default: 'true',
+                            options: {
+                                'true': 'Activé',
+                                'false': 'Désactivé'
+                            }
+                        },
+                        position_increase_pct: {
+                            type: 'number',
+                            label: 'Seuil d\'augmentation',
+                            default: 5.0,
+                            min: 1.0,
+                            max: 15.0,
+                            step: 0.5
+                        },
+                        max_investment_multiplier: {
+                            type: 'number',
+                            label: 'Multiplicateur maximal',
+                            default: 2.0,
+                            min: 1.1,
+                            max: 5.0,
+                            step: 0.1
+                        },
+                        partial_exit_pct: {
+                            type: 'number',
+                            label: 'Pourcentage de sortie',
+                            default: 30.0,
+                            min: 5.0,
+                            max: 90.0,
+                            step: 5.0
                         }
                     }
                 };
@@ -706,6 +762,66 @@
                     } else {
                         // Pas de données d'équité disponibles
                         $('#backtest-chart').parent().html('<div class="alert alert-info">Données d\'équité non disponibles</div>');
+                    }
+
+                    if (data.strategy === 'DynamicPositionStrategy') {
+                        // Calculer des statistiques supplémentaires à partir des trades
+                        let partialExits = 0;
+                        let positionIncreases = 0;
+                        let stopLossExits = 0;
+                        let averageDurationBefore1stAdjustment = 0;
+
+                        if (data.trades && data.trades.length > 0) {
+                            data.trades.forEach(trade => {
+                                if (trade.metadata) {
+                                    if (trade.metadata.partial_exits && trade.metadata.partial_exits.length > 0) {
+                                        partialExits += trade.metadata.partial_exits.length;
+                                    }
+                                    if (trade.metadata.position_increases && trade.metadata.position_increases.length > 0) {
+                                        positionIncreases += trade.metadata.position_increases.length;
+                                    }
+                                    if (trade.metadata.exit_reason === 'stop_loss') {
+                                        stopLossExits++;
+                                    }
+                                    if (trade.metadata.time_to_1st_adjustment) {
+                                        averageDurationBefore1stAdjustment += trade.metadata.time_to_1st_adjustment;
+                                    }
+                                }
+                            });
+
+                            // Calculer la moyenne
+                            if (data.trades.length > 0) {
+                                averageDurationBefore1stAdjustment = averageDurationBefore1stAdjustment / data.trades.length;
+                            }
+                        }
+                        // Ajouter un tableau de statistiques spécifiques
+                        $('#backtest-chart').parent().parent().after(`
+        <div class="card mt-3">
+            <div class="card-header bg-light">
+                <h6 class="card-title mb-0">Statistiques Dynamic Position Strategy</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="small text-muted">Sorties partielles</div>
+                        <div class="fs-5">${partialExits}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="small text-muted">Augmentations de position</div>
+                        <div class="fs-5">${positionIncreases}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="small text-muted">Sorties par stop-loss</div>
+                        <div class="fs-5">${stopLossExits}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="small text-muted">Temps moyen avant 1ère modification</div>
+                        <div class="fs-5">${averageDurationBefore1stAdjustment.toFixed(1)}h</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
                     }
                 }
             </script>

@@ -8,17 +8,18 @@ class BacktestEngine {
     private $strategy;
     private $data;
     private $config;
+    private $symbol;
     private $balance;
     private $positions = [];
     private $trades = [];
     private $equity = [];
     private $fees = 0.1; // 0.1% de frais par transaction
-
-    public function __construct(StrategyInterface $strategy, array $data, array $config) {
+    public function __construct(StrategyInterface $strategy, array $data, array $config, string $symbol = 'BTCUSDT') {
         $this->strategy = $strategy;
         $this->data = $data;
         $this->config = $config;
         $this->balance = $config['backtest']['initial_balance'];
+        $this->symbol = $symbol;
     }
 
     /**
@@ -119,6 +120,7 @@ class BacktestEngine {
 
             // Mettre à jour la valeur des positions ouvertes
             foreach ($this->positions as $symbol => $position) {
+                $position['current_price'] = $currentPrice; // Ajout de current_price
                 $position['current_value'] = $position['quantity'] * $currentPrice;
                 $position['profit_loss'] = $position['current_value'] - $position['cost'];
                 $position['profit_loss_pct'] = ($position['profit_loss'] / $position['cost']) * 100;
@@ -127,15 +129,97 @@ class BacktestEngine {
 
             // Vérifier les signaux de vente pour les positions ouvertes
             foreach ($this->positions as $symbol => $position) {
-                if ($this->strategy->shouldSell($currentData, $position)) {
-                    $this->sell($symbol, $currentPrice, $timestamp);
+                // Vérifier si la stratégie supporte getPositionAction
+                if (method_exists($this->strategy, 'getPositionAction')) {
+                    $action = $this->strategy->getPositionAction($currentData, $position);
+
+                    switch ($action) {
+                        case 'SELL':
+                            $this->sell($symbol, $currentPrice, $timestamp);
+                            break;
+
+                        case 'INCREASE_POSITION':
+                            // Simuler une augmentation de position
+                            $additionalInvestment = min(
+                                $this->config['trading']['investment_per_trade'] * 0.5,
+                                $this->balance
+                            );
+
+                            if ($additionalInvestment > 0) {
+                                // Calculer les frais
+                                $fee = ($additionalInvestment * $this->fees) / 100;
+
+                                // Calculer la quantité additionnelle
+                                $additionalQuantity = ($additionalInvestment - $fee) / $currentPrice;
+
+                                // Mettre à jour le solde
+                                $this->balance -= $additionalInvestment;
+
+                                // Mettre à jour la position
+                                $newQuantity = $position['quantity'] + $additionalQuantity;
+                                $newCost = $position['cost'] + $additionalInvestment;
+                                $newEntryPrice = $newCost / $newQuantity;
+
+                                $this->positions[$symbol]['quantity'] = $newQuantity;
+                                $this->positions[$symbol]['cost'] = $newCost;
+                                $this->positions[$symbol]['entry_price'] = $newEntryPrice;
+                                $this->positions[$symbol]['current_value'] = $newQuantity * $currentPrice;
+                                $this->positions[$symbol]['profit_loss'] = ($newQuantity * $currentPrice) - $newCost;
+                                $this->positions[$symbol]['profit_loss_pct'] = (($newQuantity * $currentPrice) - $newCost) / $newCost * 100;
+                            }
+                            break;
+
+                        case 'PARTIAL_EXIT':
+                            // Simuler une sortie partielle
+                            $exitPercentage = 30; // Pourcentage par défaut
+                            $position = $this->positions[$symbol];
+
+                            // Calculer la quantité à vendre
+                            $quantityToSell = $position['quantity'] * ($exitPercentage / 100);
+
+                            // Calculer la valeur de la vente partielle
+                            $partialSaleValue = $quantityToSell * $currentPrice;
+
+                            // Calculer les frais
+                            $fee = ($partialSaleValue * $this->fees) / 100;
+
+                            // Mettre à jour le solde
+                            $this->balance += $partialSaleValue - $fee;
+
+                            // Mettre à jour la position
+                            $remainingQuantity = $position['quantity'] - $quantityToSell;
+                            $remainingCost = $position['cost'] * ($remainingQuantity / $position['quantity']);
+
+                            if ($remainingQuantity > 0) {
+                                $this->positions[$symbol]['quantity'] = $remainingQuantity;
+                                $this->positions[$symbol]['cost'] = $remainingCost;
+                                $this->positions[$symbol]['current_value'] = $remainingQuantity * $currentPrice;
+                                $this->positions[$symbol]['profit_loss'] = ($remainingQuantity * $currentPrice) - $remainingCost;
+                                $this->positions[$symbol]['profit_loss_pct'] = (($remainingQuantity * $currentPrice) - $remainingCost) / $remainingCost * 100;
+                            } else {
+                                // Si toute la position est vendue, c'est équivalent à un SELL
+                                $this->sell($symbol, $currentPrice, $timestamp);
+                            }
+                            break;
+
+                        case 'HOLD':
+                        default:
+                            // Ne rien faire
+                            break;
+                    }
+                } else {
+                    // Stratégie classique avec shouldSell
+                    if ($this->strategy->shouldSell($currentData, $position)) {
+                        $this->sell($symbol, $currentPrice, $timestamp);
+                    }
                 }
             }
 
             // Vérifier le signal d'achat si nous avons des fonds disponibles
-            if ($this->balance > $this->config['trading']['investment_per_trade'] && empty($this->positions)) {
+            if ($this->balance > $this->config['trading']['investment_per_trade'] &&
+                count($this->positions) < ($this->config['trading']['max_open_positions'] ?? 1)) {
                 if ($this->strategy->shouldBuy($currentData)) {
-                    $this->buy('BTCUSDT', $currentPrice, $timestamp);
+                    $this->buy($this->symbol, $currentPrice, $timestamp);
                 }
             }
 

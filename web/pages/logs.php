@@ -20,6 +20,10 @@
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="warning">Warning</a></li>
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="error">Error</a></li>
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="debug">Debug</a></li>
+                    <li><a class="dropdown-item log-strategy-filter" href="#" data-filter="DynamicPositionStrategy">Dynamic Strategy</a></li>
+                    <li><a class="dropdown-item log-strategy-filter" href="#" data-filter="position_increased">Augmentation de position</a></li>
+                    <li><a class="dropdown-item log-strategy-filter" href="#" data-filter="partial_exit">Sortie partielle</a></li>
+                    <li><a class="dropdown-item log-strategy-filter" href="#" data-filter="stop_loss_updated">Mise à jour stop-loss</a></li>
                 </ul>
             </div>
         </div>
@@ -80,6 +84,24 @@
 
             const level = $(this).data('level');
             filterLogs();
+        });
+
+        $('.log-strategy-filter').on('click', function(e) {
+            e.preventDefault();
+
+            // Mettre à jour le bouton actif
+            $('.log-level-filter').removeClass('active');
+            $(this).addClass('active');
+
+            const filter = $(this).data('filter');
+
+            // Filtrer les logs
+            $('.log-line').each(function() {
+                const $line = $(this);
+                const lineText = $line.text().toLowerCase();
+
+                $line.toggle(lineText.includes(filter.toLowerCase()));
+            });
         });
 
         // Recherche dans les logs

@@ -132,7 +132,7 @@ if (isset($options['params'])) {
 }
 
 // Créer le moteur de backtest
-$backtester = new BacktestEngine($strategy, $historicalData, $config);
+$backtester = new BacktestEngine($strategy, $historicalData, $config, $symbol);
 
 // Exécuter le backtest
 echo "Exécution du backtest...\n";
