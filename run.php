@@ -1,6 +1,9 @@
 <?php
 
 use Kwizer15\TradingBot\BinanceAPI;
+use Kwizer15\TradingBot\Configuration\ApiConfiguration;
+use Kwizer15\TradingBot\Configuration\LoggingConfiguration;
+use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\Strategy\StrategyFactory;
 use Kwizer15\TradingBot\TradingBot;
 use Kwizer15\TradingBot\Utils\Logger;
@@ -16,13 +19,14 @@ if (!is_dir(__DIR__ . '/logs')) {
     mkdir(__DIR__ . '/logs', 0777, true);
 }
 
+$loggingConfig = new LoggingConfiguration($config);
 // Créer le logger
-$logger = new Logger($config['logging']['file'], $config['logging']['level']);
+$logger = new Logger($loggingConfig->file, $loggingConfig->level);
 
 $logger->info('Démarrage du bot de trading');
 
 // Créer l'instance de l'API Binance
-$binanceAPI = new BinanceAPI($config);
+$binanceAPI = new BinanceAPI(new ApiConfiguration($config));
 
 $options = getopt('', [
     'strategy:',
@@ -56,7 +60,13 @@ if ($options['params'] ?? []) {
 }
 
 // Créer le bot de trading
-$tradingBot = new TradingBot($binanceAPI, $strategy, $config, $logger, __DIR__ . '/data/positions.json');
+$tradingBot = new TradingBot(
+    $binanceAPI,
+    $strategy,
+    new TradingConfiguration($config),
+    $logger,
+    __DIR__ . '/data/positions.json'
+);
 
 // Fonction pour gérer le signal de fin
 function handleShutdown($bot, LoggerInterface $logger) {

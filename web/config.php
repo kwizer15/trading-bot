@@ -5,7 +5,7 @@
 define('BOT_PATH', dirname(__DIR__));
 
 // Inclure la configuration du bot
-$bot_config = require_once BOT_PATH . '/config/config.php';
+$bot_config = require BOT_PATH . '/config/config.php';
 
 // Configuration de l'interface web
 $web_config = [

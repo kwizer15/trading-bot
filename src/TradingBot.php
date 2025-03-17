@@ -2,6 +2,7 @@
 
 namespace Kwizer15\TradingBot;
 
+use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\Strategy\PositionAction;
 use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
@@ -14,7 +15,7 @@ class TradingBot {
     public function __construct(
         private readonly BinanceAPI $binanceAPI,
         private readonly StrategyInterface $strategy,
-        private readonly array $config,
+        private readonly TradingConfiguration $tradingConfiguration,
         private readonly LoggerInterface $logger,
         private readonly ?string $positionsFile = null,
     ) {
@@ -42,22 +43,22 @@ class TradingBot {
      * @param float $additionalInvestment Montant supplémentaire à investir
      * @return bool Succès de l'opération
      */
-    public function increasPosition(string $symbol, float $additionalInvestment) {
+    public function increasePosition(string $symbol, float $additionalInvestment): void {
         try {
             // Vérifier si nous avons cette position
             if (!isset($this->positions[$symbol])) {
                 $this->logger->warning("Impossible d'augmenter la position, aucune position trouvée pour {$symbol}");
-                return false;
+                return;
             }
 
             $position = $this->positions[$symbol];
 
             // Vérifier le solde disponible
-            $balance = $this->binanceAPI->getBalance($this->config['trading']['base_currency']);
+            $balance = $this->binanceAPI->getBalance($this->tradingConfiguration->baseCurrency);
 
-            if ($balance['free'] < $additionalInvestment) {
+            if ($balance->free < $additionalInvestment) {
                 $this->logger->warning("Solde insuffisant pour augmenter la position {$symbol}");
-                return false;
+                return;
             }
 
             // Obtenir le prix actuel
@@ -65,7 +66,7 @@ class TradingBot {
 
             if (!$currentPrice) {
                 $this->logger->error("Impossible d'obtenir le prix actuel pour {$symbol}");
-                return false;
+                return;
             }
 
             // Calculer la quantité à acheter
@@ -79,7 +80,7 @@ class TradingBot {
 
             if (!$order || !isset($order['orderId'])) {
                 $this->logger->error("Erreur lors de l'augmentation de la position {$symbol}: " . json_encode($order));
-                return false;
+                return;
             }
 
             // Mettre à jour la position
@@ -104,12 +105,8 @@ class TradingBot {
             $this->savePositions();
 
             $this->logger->info("Position augmentée pour {$symbol}: +{$additionalQuantity} au prix de {$currentPrice}");
-
-            return true;
-
         } catch (\Exception $e) {
             $this->logger->error( "Erreur lors de l'augmentation de la position {$symbol}: " . $e->getMessage());
-            return false;
         }
     }
 
@@ -215,14 +212,14 @@ class TradingBot {
             $this->positions[$symbol] = $position;
 
             // Vérifier le stop loss général
-            if ($position['profit_loss_pct'] <= -$this->config['trading']['stop_loss_percentage']) {
+            if ($position['profit_loss_pct'] <= -$this->tradingConfiguration->stopLossPercentage) {
                 $this->logger->info( "Stop loss déclenché pour {$symbol} (perte: {$position['profit_loss_pct']}%)");
                 $this->sell($symbol);
                 return;
             }
 
             // Vérifier le take profit général
-            if ($position['profit_loss_pct'] >= $this->config['trading']['take_profit_percentage']) {
+            if ($position['profit_loss_pct'] >= $this->tradingConfiguration->takeProfitPercentage) {
                 $this->logger->info( "Take profit déclenché pour {$symbol} (gain: {$position['profit_loss_pct']}%)");
                 $this->sell($symbol);
                 return;
@@ -246,7 +243,7 @@ class TradingBot {
                         $percentIncrease = $this->strategy->calculateIncreasePercentage($dtoKlines, $position);
                         $additionalInvestment = $this->calculateAdditionalInvestment($percentIncrease);
                         $this->logger->info( "Signal d'augmentation de position pour {$symbol}");
-                        $this->increasPosition($symbol, $additionalInvestment);
+                        $this->increasePosition($symbol, $additionalInvestment);
                         break;
 
                     case PositionAction::PARTIAL_EXIT:
@@ -283,7 +280,7 @@ class TradingBot {
     private function calculateAdditionalInvestment(float $percentIncrease = 50.0): float
     {
         // Par défaut, on augmente de 50% de l'investissement initial
-        $baseAmount = $this->config['trading']['investment_per_trade'];
+        $baseAmount = $this->tradingConfiguration->investmentPerTrade;
 
         return $baseAmount * ($percentIncrease / 100);
     }
@@ -313,14 +310,14 @@ class TradingBot {
      */
     private function findBuyOpportunities() {
         // Vérifier si nous avons déjà atteint le nombre maximum de positions
-        if (count($this->positions) >= $this->config['trading']['max_open_positions']) {
+        if (count($this->positions) >= $this->tradingConfiguration->maxOpenPositions) {
             $this->logger->info( 'Nombre maximum de positions atteint, aucun nouvel achat possible');
             return;
         }
 
         // Parcourir les symboles configurés
-        foreach ($this->config['trading']['symbols'] as $symbol) {
-            $pairSymbol = $symbol . $this->config['trading']['base_currency'];
+        foreach ($this->tradingConfiguration->symbols as $symbol) {
+            $pairSymbol = $symbol . $this->tradingConfiguration->baseCurrency;
 
             // Vérifier si nous avons déjà une position sur ce symbole
             if (isset($this->positions[$pairSymbol])) {
@@ -338,7 +335,7 @@ class TradingBot {
                     $this->buy($pairSymbol);
 
                     // Si nous avons atteint le nombre maximum de positions après cet achat, on arrête
-                    if (count($this->positions) >= $this->config['trading']['max_open_positions']) {
+                    if (count($this->positions) >= $this->tradingConfiguration->maxOpenPositions) {
                         break;
                     }
                 }
@@ -354,9 +351,9 @@ class TradingBot {
     private function buy($symbol): void {
         try {
             // Vérifier le solde disponible
-            $balance = $this->binanceAPI->getBalance($this->config['trading']['base_currency']);
+            $balance = $this->binanceAPI->getBalance($this->tradingConfiguration->baseCurrency);
 
-            if ($balance['free'] < $this->config['trading']['investment_per_trade']) {
+            if ($balance->free < $this->tradingConfiguration->investmentPerTrade) {
                 $this->logger->warning("Solde insuffisant pour acheter {$symbol}");
                 return;
             }
@@ -370,7 +367,7 @@ class TradingBot {
             }
 
             // Calculer la quantité à acheter
-            $quantity = $this->config['trading']['investment_per_trade'] / $currentPrice;
+            $quantity = $this->tradingConfiguration->investmentPerTrade / $currentPrice;
 
             // Arrondir la quantité selon les règles de Binance (à adapter selon les paires)
             $quantity = floor($quantity * 100000) / 100000;
@@ -389,7 +386,7 @@ class TradingBot {
                 'entry_price' => $currentPrice,
                 'quantity' => $quantity,
                 'timestamp' => time() * 1000,
-                'cost' => $this->config['trading']['investment_per_trade'],
+                'cost' => $this->tradingConfiguration->investmentPerTrade,
                 'current_price' => $currentPrice,
                 'current_value' => $quantity * $currentPrice,
                 'profit_loss' => 0,

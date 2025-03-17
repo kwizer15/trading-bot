@@ -15,6 +15,7 @@
         <?php
         // Calculer les statistiques
         use Kwizer15\TradingBot\BinanceAPI;
+        use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 
         $positions = get_positions();
         $trade_history = get_trade_history();
@@ -26,11 +27,11 @@
         // Récupérer le solde depuis Binance si possible
         try {
             $config = get_config();
-            $binanceAPI = new BinanceAPI($config);
+            $binanceAPI = new BinanceAPI(new ApiConfiguration($config));
 
             $base_currency = $config['trading']['base_currency'];
             $balance_data = $binanceAPI->getBalance($base_currency);
-            $balance = $balance_data['free'] + $balance_data['locked'];
+            $balance = $balance_data->free + $balance_data->locked;
         } catch (Exception $e) {
             // Utiliser une valeur par défaut
             $balance = $config['backtest']['initial_balance'];

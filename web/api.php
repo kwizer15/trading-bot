@@ -1,5 +1,7 @@
 <?php
 
+use Kwizer15\TradingBot\Configuration\ApiConfiguration;
+
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 // API pour les requêtes AJAX
@@ -16,6 +18,9 @@ if (!isset($_REQUEST['action'])) {
 }
 
 $action = $_REQUEST['action'];
+
+$config = get_config();
+$api = new Kwizer15\TradingBot\BinanceAPI(new ApiConfiguration($config));
 
 // Traiter l'action demandée
 switch ($action) {
@@ -323,8 +328,6 @@ switch ($action) {
 
         case 'get_base_currencies':
             try {
-                $config = get_config();
-                $api = new Kwizer15\TradingBot\BinanceAPI($config);
                 $baseCurrencies = $api->getBaseCurrencies();
 
                 send_json_response([
@@ -341,9 +344,6 @@ switch ($action) {
 
         case 'get_symbols':
                 try {
-                    $config = get_config();
-                    $api = new Kwizer15\TradingBot\BinanceAPI($config);
-
                     $baseCurrency = $_GET['base_currency'] ?? 'USDT';
                     $symbols = $api->getAvailableSymbols($baseCurrency);
 

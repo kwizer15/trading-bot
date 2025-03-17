@@ -2,38 +2,27 @@
 
 namespace Kwizer15\TradingBot;
 
-use AllowDynamicProperties;
+use Kwizer15\TradingBot\Configuration\ApiConfiguration;
+use Kwizer15\TradingBot\DTO\Balance;
 
 class BinanceAPI {
-    private $apiKey;
-    private $apiSecret;
-    private $testBaseUrl;
-    private $realBaseUrl;
-    private $baseUrl;
-    private $testMode;
-    private $exchangeInfo;
+    private const BASE_URL = 'https://api.binance.com/api/';
+    private const BASE_URL_TEST = 'https://testnet.binance.vision/api/';
 
-    public function __construct(array $config) {
-        $this->apiKey = $config['api']['key'];
-        $this->apiSecret = $config['api']['secret'];
-        $this->testMode = $config['api']['test_mode'];
+    private string $baseUrl;
+    private array $exchangeInfo;
 
-        $this->testBaseUrl = 'https://testnet.binance.vision/api/';
-        $this->realBaseUrl = 'https://api.binance.com/api/';
-        // Utilisez l'URL testnet si en mode test
-        if ($this->testMode) {
-            $this->baseUrl = $this->testBaseUrl;
-        } else {
-            $this->baseUrl = $this->realBaseUrl;
-        }
+    public function __construct(
+        private readonly ApiConfiguration $apiConfig
+    ) {
+        $this->baseUrl = $this->apiConfig->testMode ? self::BASE_URL_TEST : self::BASE_URL;
     }
 
     /**
      * Récupère les données de marché pour un symbole
-     * Version corrigée pour prendre en compte startTime et endTime
      */
-    public function getKlines($symbol, $interval = '1h', $limit = 100, $startTime = null, $endTime = null) {
-
+    public function getKlines(string $symbol, string $interval = '1h', int $limit = 100, ?int $startTime = null, ?int $endTime = null): array
+    {
         $endpoint = 'v3/klines';
         $params = [
             'symbol' => $symbol,
@@ -50,13 +39,14 @@ class BinanceAPI {
             $params['endTime'] = $endTime;
         }
 
-        return $this->makeRequest($endpoint, $params, 'GET', false, $this->realBaseUrl);
+        return $this->makeRequest($endpoint, $params, 'GET', false, self::BASE_URL);
     }
 
     /**
      * Récupère les informations de compte
      */
-    public function getAccount() {
+    private function getAccount(): array
+    {
         $endpoint = 'v3/account';
         return $this->makeRequest($endpoint, [], 'GET', true);
     }
@@ -64,24 +54,18 @@ class BinanceAPI {
     /**
      * Récupère le solde pour une devise spécifique
      */
-    public function getBalance($currency) {
+    public function getBalance(string $currency): Balance {
         $account = $this->getAccount();
 
         if (isset($account['balances'])) {
             foreach ($account['balances'] as $balance) {
                 if ($balance['asset'] === $currency) {
-                    return [
-                        'free' => floatval($balance['free']),
-                        'locked' => floatval($balance['locked'])
-                    ];
+                    return new Balance($balance['free'], $balance['locked']);
                 }
             }
         }
 
-        return [
-            'free' => 0,
-            'locked' => 0
-        ];
+        return new Balance();
     }
 
     /**
@@ -229,7 +213,7 @@ class BinanceAPI {
     /**
      * Effectue une requête à l'API Binance
      */
-    private function makeRequest($endpoint, array $params = [], $method = 'GET', $auth = false, $baseUrl = null) {
+    private function makeRequest($endpoint, array $params = [], $method = 'GET', $auth = false, $baseUrl = null): array {
         $baseUrl ??= $this->baseUrl;
         $url = $baseUrl . $endpoint;
 
@@ -250,10 +234,7 @@ class BinanceAPI {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
         $headers = ['Content-Type: application/x-www-form-urlencoded'];
-
-        if ($this->apiKey) {
-            $headers[] = 'X-MBX-APIKEY: ' . $this->apiKey;
-        }
+        $headers[] = 'X-MBX-APIKEY: ' . $this->apiConfig->key;
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
@@ -291,7 +272,7 @@ class BinanceAPI {
      */
     private function generateSignature($params) {
         $query = http_build_query($params);
-        return hash_hmac('sha256', $query, $this->apiSecret);
+        return hash_hmac('sha256', $query, $this->apiConfig->secret);
     }
 
     /**

@@ -5,6 +5,9 @@ require __DIR__ . '/vendor/autoload.php';
 use Kwizer15\TradingBot\Backtest\BacktestEngine;
 use Kwizer15\TradingBot\Backtest\DataLoader;
 use Kwizer15\TradingBot\BinanceAPI;
+use Kwizer15\TradingBot\Configuration\ApiConfiguration;
+use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
+use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\Strategy\StrategyFactory;
 
@@ -47,7 +50,7 @@ if (isset($options['config'])) {
     }
 } else {
     // Charger la configuration par défaut
-    $config = require_once __DIR__ . '/config/config.php';
+    $config = require __DIR__ . '/config/config.php';
 }
 
 // Écraser les dates si spécifiées en ligne de commande
@@ -60,7 +63,7 @@ if (isset($options['end-date'])) {
 }
 
 // Créer l'instance de l'API Binance
-$binanceAPI = new BinanceAPI($config);
+$binanceAPI = new BinanceAPI(new ApiConfiguration($config));
 
 // Créer le chargeur de données
 $dataLoader = new DataLoader($binanceAPI);
@@ -133,7 +136,13 @@ if (isset($options['params'])) {
 }
 
 // Créer le moteur de backtest
-$backtester = new BacktestEngine($strategy, $dtoHistoricalData, $config, $symbol);
+$backtester = new BacktestEngine(
+    $strategy,
+    $dtoHistoricalData,
+    new TradingConfiguration($config),
+    new BacktestConfiguration($config),
+    $symbol,
+);
 
 // Exécuter le backtest
 echo "Exécution du backtest...\n";

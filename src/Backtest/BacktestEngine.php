@@ -2,12 +2,15 @@
 
 namespace Kwizer15\TradingBot\Backtest;
 
+use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
+use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\Strategy\PositionAction;
 use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
 
-class BacktestEngine {
+class BacktestEngine
+{
     private float $balance;
     private array $positions = [];
     private array $trades = [];
@@ -16,10 +19,11 @@ class BacktestEngine {
     public function __construct(
         private readonly StrategyInterface $strategy,
         private readonly KlineHistory      $history,
-        private readonly array             $config,
-        private readonly string            $symbol = 'BTCUSDT'
+        private readonly TradingConfiguration $tradingConfiguration,
+        BacktestConfiguration $backtestConfiguration,
+        private readonly string            $symbol = 'BTCUSDT',
     ) {
-        $this->balance = $config['backtest']['initial_balance'];
+        $this->balance = $backtestConfiguration->initialBalance;
     }
 
     /**
@@ -27,7 +31,7 @@ class BacktestEngine {
      */
     private function buy(string $symbol, float $price, int $timestamp): void
     {
-        $investment = $this->config['trading']['investment_per_trade'];
+        $investment = $this->tradingConfiguration->investmentPerTrade;
 
         // Vérifier si nous avons assez de fonds
         if ($this->balance < $investment) {
@@ -141,7 +145,7 @@ class BacktestEngine {
                         case PositionAction::INCREASE_POSITION:
                             // Simuler une augmentation de position
                             $additionalInvestment = min(
-                                $this->config['trading']['investment_per_trade'] * ($this->strategy->calculateIncreasePercentage($currentData, $position) / 100),
+                                $this->tradingConfiguration->investmentPerTrade * ($this->strategy->calculateIncreasePercentage($currentData, $position) / 100),
                                 $this->balance
                             );
 
@@ -207,8 +211,8 @@ class BacktestEngine {
             }
 
             // Vérifier le signal d'achat si nous avons des fonds disponibles
-            if ($this->balance > $this->config['trading']['investment_per_trade'] &&
-                count($this->positions) < ($this->config['trading']['max_open_positions'] ?? 1)) {
+            if ($this->balance > $this->tradingConfiguration->investmentPerTrade &&
+                count($this->positions) < ($this->tradingConfiguration->maxOpenPositions)) {
                 if ($this->strategy->shouldBuy($currentData, $symbol)) {
                     $this->buy($this->symbol, $currentPrice, $timestamp);
                 }
