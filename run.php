@@ -4,11 +4,12 @@ use Kwizer15\TradingBot\BinanceAPI;
 use Kwizer15\TradingBot\Strategy\StrategyFactory;
 use Kwizer15\TradingBot\TradingBot;
 use Kwizer15\TradingBot\Utils\Logger;
+use Psr\Log\LoggerInterface;
 
 require __DIR__ . '/vendor/autoload.php';
 
 // Charger la configuration
-$config = require_once __DIR__ . '/config/config.php';
+$config = require __DIR__ . '/config/config.php';
 
 // Créer le dossier de logs s'il n'existe pas
 if (!is_dir(__DIR__ . '/logs')) {
@@ -18,7 +19,7 @@ if (!is_dir(__DIR__ . '/logs')) {
 // Créer le logger
 $logger = new Logger($config['logging']['file'], $config['logging']['level']);
 
-$logger->log('info', 'Démarrage du bot de trading');
+$logger->info('Démarrage du bot de trading');
 
 // Créer l'instance de l'API Binance
 $binanceAPI = new BinanceAPI($config);
@@ -29,7 +30,7 @@ $options = getopt('', [
     'params:',
 ]);
 // Créer la stratégie
-$strategyName = $options['strategy'] ?? 'MovingAverageStrategy';
+$strategyName = $options['strategy'] ?? 'DynamicPositionStrategy';
 try {
     $strategy = (new StrategyFactory())->create($strategyName);
 
@@ -40,26 +41,26 @@ try {
 }
 
 // Vérifier si des paramètres de stratégie sont fournis
-if ($options['params']) {
+if ($options['params'] ?? []) {
     $queryString = explode(' ', $options['params']);
     $params = [];
     foreach ($queryString as $param) {
-        list($key, $value) = explode('=', $argv[$i]);
+        list($key, $value) = explode('=', $param);
         $params[$key] = is_numeric($value) ? (float) $value : $value;
     }
 
     if (!empty($params)) {
         $strategy->setParameters($params);
-        $logger->log('info', 'Paramètres personnalisés: ' . json_encode($params));
+        $logger->info('Paramètres personnalisés: ' . json_encode($params));
     }
 }
 
 // Créer le bot de trading
-$tradingBot = new TradingBot($binanceAPI, $strategy, $config, $logger);
+$tradingBot = new TradingBot($binanceAPI, $strategy, $config, $logger, __DIR__ . '/data/positions.json');
 
 // Fonction pour gérer le signal de fin
-function handleShutdown($bot, $logger) {
-    $logger->log('info', 'Signal de fin reçu, arrêt du bot');
+function handleShutdown($bot, LoggerInterface $logger) {
+    $logger->info('Signal de fin reçu, arrêt du bot');
     // Sauvegarde de l'état si nécessaire
     exit(0);
 }
@@ -79,7 +80,7 @@ if (function_exists('pcntl_signal')) {
 $mode = isset($options['daemon']) ? 'daemon' : 'single';
 
 if ($mode === 'daemon') {
-    $logger->log('info', 'Démarrage en mode daemon (continu)');
+    $logger->info('Démarrage en mode daemon (continu)');
 
     // Boucle infinie avec intervalle de vérification
     while (true) {
@@ -88,23 +89,23 @@ if ($mode === 'daemon') {
             $tradingBot->run();
 
             // Attendre l'intervalle configuré
-            $logger->log('info', 'En attente pour ' . $config['schedule']['check_interval'] . ' secondes');
+            $logger->info('En attente pour ' . $config['schedule']['check_interval'] . ' secondes');
             sleep($config['schedule']['check_interval']);
         } catch (Exception $e) {
-            $logger->log('error', 'Erreur: ' . $e->getMessage());
+            $logger->error('Erreur: ' . $e->getMessage());
             // Attendre un peu avant de réessayer en cas d'erreur
             sleep(60);
         }
     }
 } else {
-    $logger->log('info', 'Exécution unique');
+    $logger->info( 'Exécution unique');
 
     // Exécuter le bot une seule fois
     try {
         $tradingBot->run();
-        $logger->log('info', 'Exécution terminée');
+        $logger->info( 'Exécution terminée');
     } catch (Exception $e) {
-        $logger->log('error', 'Erreur: ' . $e->getMessage());
+        $logger->error( 'Erreur: ' . $e->getMessage());
     }
 }
 

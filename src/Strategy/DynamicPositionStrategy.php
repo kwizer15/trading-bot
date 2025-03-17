@@ -2,7 +2,9 @@
 
 namespace Kwizer15\TradingBot\Strategy;
 
-class DynamicPositionStrategy implements StrategyInterface {
+use Kwizer15\TradingBot\DTO\KlineHistory;
+
+class DynamicPositionStrategy implements PositionActionStrategyInterface {
     // Paramètres par défaut de la stratégie
     private $params = [
         'initial_stop_loss_pct' => 5.0,      // Stop loss initial en pourcentage
@@ -32,25 +34,15 @@ class DynamicPositionStrategy implements StrategyInterface {
     /**
      * Analyse les données du marché et détermine si un signal d'achat est présent
      */
-    public function shouldBuy(array $marketData): bool {
-        // Extraire les klines
-        $klines = $this->formatKlines($marketData);
-
-        // Stocker le symbole courant à partir du premier kline si disponible
-        if (isset($marketData[0]) && isset($marketData[0][0])) {
-            // Utiliser une méthode pour extraire le symbole ou le passer en paramètre externe
-            $this->currentSymbol = "CURRENT_SYMBOL"; // À remplacer par la méthode appropriée
-        }
-
+    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool {
         // Vérifier si nous avons déjà eu une position sur ce symbole qui a été stoppée
-        if ($this->currentSymbol &&
-            isset($this->positionData[$this->currentSymbol]) &&
-            $this->positionData[$this->currentSymbol]['exit_reason'] === 'stop_loss' &&
-            $this->positionData[$this->currentSymbol]['last_exit_price'] > 0) {
+        if (isset($this->positionData[$currentSymbol]) &&
+            $this->positionData[$currentSymbol]['exit_reason'] === 'stop_loss' &&
+            $this->positionData[$currentSymbol]['last_exit_price'] > 0) {
 
             // Obtenir le prix actuel
-            $currentPrice = $klines[count($klines) - 1]['close'];
-            $lastExitPrice = $this->positionData[$this->currentSymbol]['last_exit_price'];
+            $currentPrice = $history->last()->close;
+            $lastExitPrice = $this->positionData[$currentSymbol]['last_exit_price'];
 
             // Vérifier si le prix est inférieur au prix de sortie (condition de réentrée)
             if ($currentPrice >= $lastExitPrice) {
@@ -62,62 +54,96 @@ class DynamicPositionStrategy implements StrategyInterface {
         if (empty($this->params['entry_indicators'])) {
             // Sans conditions spécifiques, on peut utiliser une règle simple
             // comme une tendance haussière récente
-            return $this->detectUptrend($klines);
+            return $this->detectUptrend($history);
         }
 
         // Sinon utiliser des indicateurs techniques
-        return $this->analyzeEntryIndicators($klines);
+        return $this->analyzeEntryIndicators($history);
     }
 
     /**
      * Analyse les données du marché et détermine si un signal de vente est présent
      */
-    public function shouldSell(array $marketData, array $position): bool {
-        // Version simplifiée pour le backtest
-        static $candles_count = 0;
-
-        // Extraire les klines
-        $klines = $this->formatKlines($marketData);
+    public function shouldSell(KlineHistory $history, array $position): bool {
+        // Extraire les klines et le symbole
         $symbol = $position['symbol'];
+
+        // Obtenir le timestamp actuel depuis les données de marché (pour le backtest)
+        $currentTime = $history->last()->openTime;
 
         // Si nous n'avons pas de données pour cette position, l'initialiser
         if (!isset($this->positionData[$symbol])) {
             $this->initializePositionData($symbol, $position);
-            $candles_count = 0;
         }
 
         // Mettre à jour les données de position
-        $this->updatePositionData($symbol, $position, $klines);
+        $this->updatePositionData($symbol, $position, $history);
 
-        // Vérifier le stop loss en premier
+        // Vérifier si c'est le moment d'une analyse périodique
+        $lastAnalysisTime = $this->positionData[$symbol]['last_analysis_time'];
+        $analysisPeriodMs = $this->params['analysis_period'] * 3600 * 1000;
+
+        // Vérifier le stop loss d'abord (ça peut se déclencher à tout moment)
         $stopLossPrice = $this->positionData[$symbol]['stop_loss_price'];
         $currentPrice = $position['current_price'];
 
         if ($currentPrice <= $stopLossPrice) {
             // Stop loss atteint
-            // Marquer cette position pour ne pas la reprendre sauf si le prix baisse encore
             $this->positionData[$symbol]['last_exit_price'] = $currentPrice;
             $this->positionData[$symbol]['exit_reason'] = 'stop_loss';
             $this->savePositionData();
             return true;
         }
 
-        // Pour le backtest, incrémenter un compteur de bougies au lieu d'utiliser le temps réel
-        $candles_count++;
-
-        // Ne faire l'analyse que tous les N bougies (où N correspond à analysis_period en heures)
-        if ($candles_count >= $this->params['analysis_period']) {
-            $candles_count = 0; // Réinitialiser le compteur
+        // Si le temps écoulé est suffisant, faire l'analyse périodique
+        if ($currentTime - $lastAnalysisTime >= $analysisPeriodMs) {
+            // Mettre à jour le timestamp de la dernière analyse
+            $this->positionData[$symbol]['last_analysis_time'] = $currentTime;
 
             // Récupérer le prix d'entrée moyen et le prix actuel
             $entryPrice = $this->positionData[$symbol]['avg_entry_price'];
-            $currentPrice = $position['current_price'];
 
-            // Le reste de votre logique d'analyse ici...
-            // ...
+            // Calculer la performance actuelle
+            $performancePct = (($currentPrice - $entryPrice) / $entryPrice) * 100;
 
-            // Sauvegarder les données de position
-            $this->savePositionData();
+            if ($performancePct > 0) {
+                // Le prix a augmenté, envisager une sortie partielle
+                if ($this->params['partial_take_profit']) {
+                    $initialInvestment = $this->positionData[$symbol]['initial_investment'];
+                    $currentValue = $position['current_value'];
+
+                    // Calculer le profit en montant
+                    $profit = $currentValue - $initialInvestment;
+
+                    if ($profit > 0) {
+                        // On ne peut pas implémenter de sortie partielle directement ici
+                        // car shouldSell ne peut retourner que true ou false
+
+                        // On met à jour le stop loss pour protéger le reste de la position
+                        $this->updateStopLoss($symbol, $position, $entryPrice);
+                        $this->savePositionData();
+                    }
+                }
+            } else {
+                // Le prix a baissé, envisager d'augmenter la position
+                $decreasePct = abs($performancePct);
+
+                // Vérifier si la baisse justifie une augmentation de position
+                if ($decreasePct >= $this->params['position_increase_pct']) {
+                    // Calculer le multiplicateur actuel
+                    $initialInvestment = $this->positionData[$symbol]['initial_investment'];
+                    $currentInvestment = $this->positionData[$symbol]['total_investment'];
+                    $currentMultiplier = $currentInvestment / $initialInvestment;
+
+                    // Vérifier si nous pouvons encore augmenter la position
+                    if ($currentMultiplier < $this->params['max_investment_multiplier']) {
+                        // On ne peut pas implémenter d'augmentation directement ici
+                        // On met juste à jour le stop loss
+                        $this->updateStopLoss($symbol, $position, $entryPrice);
+                        $this->savePositionData();
+                    }
+                }
+            }
         }
 
         // Par défaut, ne pas vendre
@@ -127,18 +153,12 @@ class DynamicPositionStrategy implements StrategyInterface {
     /**
      * Détermine l'action à effectuer sur une position
      */
-    public function getPositionAction(array $marketData, array $position): string {
-        // Version adaptée pour le backtest
-        static $candles_count = [];
-
-        // Extraire les klines
-        $klines = $this->formatKlines($marketData);
+    public function getPositionAction(KlineHistory $history, array $position): PositionAction {
+        // Extraire les klines et le symbole
         $symbol = $position['symbol'];
 
-        // Initialiser le compteur pour ce symbole si nécessaire
-        if (!isset($candles_count[$symbol])) {
-            $candles_count[$symbol] = 0;
-        }
+        // Obtenir le timestamp actuel depuis les données de marché (pour le backtest)
+        $currentTime = $history->last()->openTime;
 
         // Si nous n'avons pas de données pour cette position, l'initialiser
         if (!isset($this->positionData[$symbol])) {
@@ -146,9 +166,9 @@ class DynamicPositionStrategy implements StrategyInterface {
         }
 
         // Mettre à jour les données de position
-        $this->updatePositionData($symbol, $position, $klines);
+        $this->updatePositionData($symbol, $position, $history);
 
-        // Vérifier le stop loss en premier
+        // Vérifier le stop loss d'abord
         $stopLossPrice = $this->positionData[$symbol]['stop_loss_price'];
         $currentPrice = $position['current_price'];
 
@@ -157,25 +177,68 @@ class DynamicPositionStrategy implements StrategyInterface {
             $this->positionData[$symbol]['last_exit_price'] = $currentPrice;
             $this->positionData[$symbol]['exit_reason'] = 'stop_loss';
             $this->savePositionData();
-            return 'SELL';
+            return PositionAction::SELL;
         }
 
-        // Incrémenter le compteur de bougies pour ce symbole
-        $candles_count[$symbol]++;
+        // Vérifier si c'est le moment d'une analyse périodique
+        $lastAnalysisTime = $this->positionData[$symbol]['last_analysis_time'];
+        $analysisPeriodMs = $this->params['analysis_period'] * 3600 * 1000;
 
-        // Ne faire l'analyse que tous les N bougies
-        if ($candles_count[$symbol] >= $this->params['analysis_period']) {
-            $candles_count[$symbol] = 0; // Réinitialiser le compteur
+        if ($currentTime - $lastAnalysisTime >= $analysisPeriodMs) {
+            // Mettre à jour le timestamp de la dernière analyse
+            $this->positionData[$symbol]['last_analysis_time'] = $currentTime;
 
-            // Ici, insérez votre logique d'analyse de position
-            // ...
+            // Récupérer le prix d'entrée moyen et le prix actuel
+            $entryPrice = $this->positionData[$symbol]['avg_entry_price'];
+
+            // Calculer la performance actuelle
+            $performancePct = (($currentPrice - $entryPrice) / $entryPrice) * 100;
+
+            if ($performancePct > 0) {
+                // Le prix a augmenté, envisager une sortie partielle
+                if ($this->params['partial_take_profit']) {
+                    $initialInvestment = $this->positionData[$symbol]['initial_investment'];
+                    $currentValue = $position['current_value'];
+
+                    // Calculer le profit en montant
+                    $profit = $currentValue - $initialInvestment;
+
+                    if ($profit > 0) {
+                        // On met à jour le stop loss pour protéger le reste de la position
+                        $this->updateStopLoss($symbol, $position, $entryPrice);
+                        $this->savePositionData();
+
+                        return PositionAction::PARTIAL_EXIT;
+                    }
+                }
+            } else {
+                // Le prix a baissé, envisager d'augmenter la position
+                $decreasePct = abs($performancePct);
+
+                // Vérifier si la baisse justifie une augmentation de position
+                if ($decreasePct >= $this->params['position_increase_pct']) {
+                    // Calculer le multiplicateur actuel
+                    $initialInvestment = $this->positionData[$symbol]['initial_investment'];
+                    $currentInvestment = $this->positionData[$symbol]['total_investment'];
+                    $currentMultiplier = $currentInvestment / $initialInvestment;
+
+                    // Vérifier si nous pouvons encore augmenter la position
+                    if ($currentMultiplier < $this->params['max_investment_multiplier']) {
+                        // On met à jour le stop loss
+                        $this->updateStopLoss($symbol, $position, $entryPrice);
+                        $this->savePositionData();
+
+                        return PositionAction::INCREASE_POSITION;
+                    }
+                }
+            }
 
             // Sauvegarder les données de position
             $this->savePositionData();
         }
 
         // Par défaut, maintenir la position
-        return 'HOLD';
+        return PositionAction::HOLD;
     }
 
     /**
@@ -220,7 +283,7 @@ class DynamicPositionStrategy implements StrategyInterface {
     /**
      * Met à jour les données d'une position existante
      */
-    private function updatePositionData(string $symbol, array $position, array $klines): void {
+    private function updatePositionData(string $symbol, array $position, KlineHistory $klines): void {
         // Mettre à jour les valeurs actuelles
         $this->positionData[$symbol]['current_price'] = $position['current_price'];
         $this->positionData[$symbol]['current_value'] = $position['current_value'];
@@ -252,37 +315,19 @@ class DynamicPositionStrategy implements StrategyInterface {
     }
 
     /**
-     * Formate les klines pour faciliter l'analyse
-     */
-    private function formatKlines(array $marketData): array {
-        $formattedKlines = [];
-
-        foreach ($marketData as $kline) {
-            $formattedKlines[] = [
-                'open_time' => $kline[0],
-                'open' => floatval($kline[1]),
-                'high' => floatval($kline[2]),
-                'low' => floatval($kline[3]),
-                'close' => floatval($kline[4]),
-                'volume' => floatval($kline[5]),
-                'close_time' => $kline[6]
-            ];
-        }
-
-        return $formattedKlines;
-    }
-
-    /**
      * Détecte si il y a une tendance haussière récente
      */
-    private function detectUptrend(array $klines): bool {
+    private function detectUptrend(KlineHistory $history): bool {
         // Exemple simple: vérifier si les 3 dernières bougies sont haussières
-        $count = count($klines);
-        if ($count < 3) return false;
+        $count = $history->count();
+        if ($count < 3) {
+            return false;
+        }
 
         $bullishCount = 0;
         for ($i = $count - 3; $i < $count; $i++) {
-            if ($klines[$i]['close'] > $klines[$i]['open']) {
+            $kline = $history->get($i);
+            if ($kline->close > $kline->open) {
                 $bullishCount++;
             }
         }
@@ -293,10 +338,10 @@ class DynamicPositionStrategy implements StrategyInterface {
     /**
      * Analyse les indicateurs techniques pour l'entrée
      */
-    private function analyzeEntryIndicators(array $klines): bool {
+    private function analyzeEntryIndicators(KlineHistory $history): bool {
         // Calculer le RSI
         $rsiPeriod = $this->params['entry_indicators']['rsi_period'];
-        $rsiValue = $this->calculateRSI($klines, $rsiPeriod);
+        $rsiValue = $this->calculateRSI($history, $rsiPeriod);
 
         // Vérifier la condition de surachat
         if ($rsiValue <= $this->params['entry_indicators']['rsi_oversold']) {
@@ -305,7 +350,7 @@ class DynamicPositionStrategy implements StrategyInterface {
             $slowPeriod = $this->params['entry_indicators']['macd_slow'];
             $signalPeriod = $this->params['entry_indicators']['macd_signal'];
 
-            $macd = $this->calculateMACD($klines, $fastPeriod, $slowPeriod, $signalPeriod);
+            $macd = $this->calculateMACD($history, $fastPeriod, $slowPeriod, $signalPeriod);
 
             // Vérifier si le MACD croise au-dessus de la ligne de signal
             $count = count($macd);
@@ -327,13 +372,13 @@ class DynamicPositionStrategy implements StrategyInterface {
     /**
      * Calcule l'indicateur RSI
      */
-    private function calculateRSI(array $klines, int $period): float {
+    private function calculateRSI(KlineHistory $history, int $period): float {
         // Liste des variations de prix
         $changes = [];
-        $count = count($klines);
+        $count = $history->count();
 
         for ($i = 1; $i < $count; $i++) {
-            $changes[] = $klines[$i]['close'] - $klines[$i - 1]['close'];
+            $changes[] = $history->get($i)->close - $history->get($i - 1)->close;
         }
 
         if (count($changes) < $period) {
@@ -377,9 +422,10 @@ class DynamicPositionStrategy implements StrategyInterface {
     /**
      * Calcule l'indicateur MACD
      */
-    private function calculateMACD(array $klines, int $fastPeriod, int $slowPeriod, int $signalPeriod): array {
+    private function calculateMACD(KlineHistory $history, int $fastPeriod, int $slowPeriod, int $signalPeriod): array {
         // Extraire les prix de clôture
-        $closes = array_column($klines, 'close');
+        $count = $history->count();
+        $closes = array_column($history->getData(), 'close');
 
         // Calculer les EMA
         $fastEMA = $this->calculateEMA($closes, $fastPeriod);
@@ -387,7 +433,6 @@ class DynamicPositionStrategy implements StrategyInterface {
 
         // Calculer la ligne MACD
         $macdLine = [];
-        $count = count($closes);
 
         for ($i = 0; $i < $count; $i++) {
             if (isset($fastEMA[$i]) && isset($slowEMA[$i])) {
@@ -462,5 +507,21 @@ class DynamicPositionStrategy implements StrategyInterface {
 
     public function getParameters(): array {
         return $this->params;
+    }
+
+    public function calculateIncreasePercentage(KlineHistory $marketData, array $position): float
+    {
+        return $this->params['position_increase_pct'];
+    }
+
+    /**
+     * Calcule le pourcentage de la position à sortir lors d'une sortie partielle
+     * @param array $position Données de la position
+     * @param array $marketData Données du marché (klines)
+     * @return float Pourcentage à sortir
+     */
+    public function calculateExitPercentage(KlineHistory $marketData, array $position): float {
+        // Par défaut, on sort 30% de la position
+        return $this->params['partial_exit_pct'];
     }
 }

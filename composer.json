@@ -4,6 +4,7 @@
     "type": "project",
     "require": {
         "php": "^8.2",
+        "ext-curl": "*",
         "psr/log": "^3.0"
     },
     "require-dev": {

@@ -2,6 +2,8 @@
 
 namespace Kwizer15\TradingBot\Strategy;
 
+use Kwizer15\TradingBot\DTO\KlineHistory;
+
 class MovingAverageStrategy implements StrategyInterface {
     private $params = [
         'short_period' => 9,   // Période courte (en bougies)
@@ -12,8 +14,15 @@ class MovingAverageStrategy implements StrategyInterface {
     /**
      * Calcule la moyenne mobile simple pour une période donnée
      */
-    private function calculateSMA(array $data, int $period, int $priceIndex): float {
-        $count = count($data);
+    private function calculateSMA(KlineHistory $history, int $period, int $priceIndex): float {
+        $count = $history->count();
+
+        $priceIndexMap = [
+            1 => 'open',
+            2 => 'high',
+            3 => 'low',
+            4 => 'close',
+        ];
 
         if ($count < $period) {
             throw new \Exception("Pas assez de données pour calculer la SMA de période {$period}");
@@ -21,9 +30,10 @@ class MovingAverageStrategy implements StrategyInterface {
 
         $sum = 0;
 
+        $priceName = $priceIndexMap[$priceIndex];
         // Prendre les dernières bougies selon la période
         for ($i = $count - $period; $i < $count; $i++) {
-            $sum += floatval($data[$i][$priceIndex]);
+            $sum += $history->get($i)->$priceName;
         }
 
         return $sum / $period;
@@ -33,23 +43,22 @@ class MovingAverageStrategy implements StrategyInterface {
      * Vérifie si un croisement haussier (Golden Cross) s'est produit
      * (SMA courte croise au-dessus de SMA longue)
      */
-    public function shouldBuy(array $marketData): bool {
+    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool {
         try {
             // Calculer la SMA courte et longue actuelles
-            $shortSMA_current = $this->calculateSMA($marketData, $this->params['short_period'], $this->params['price_index']);
-            $longSMA_current = $this->calculateSMA($marketData, $this->params['long_period'], $this->params['price_index']);
+            $shortSMA_current = $this->calculateSMA($history, $this->params['short_period'], $this->params['price_index']);
+            $longSMA_current = $this->calculateSMA($history, $this->params['long_period'], $this->params['price_index']);
 
             // Si nous n'avons pas assez de données pour les calculs précédents, on ne peut pas détecter un croisement
-            if (count($marketData) <= $this->params['long_period']) {
+            if ($history->count() <= $this->params['long_period']) {
                 return false;
             }
 
             // Créer un ensemble de données sans la dernière bougie pour calculer les SMA précédentes
-            $previousData = array_slice($marketData, 0, -1);
-
+            $dtoPreviousData = $history->slice(-1);
             // Calculer la SMA courte et longue précédentes
-            $shortSMA_previous = $this->calculateSMA($previousData, $this->params['short_period'], $this->params['price_index']);
-            $longSMA_previous = $this->calculateSMA($previousData, $this->params['long_period'], $this->params['price_index']);
+            $shortSMA_previous = $this->calculateSMA($dtoPreviousData, $this->params['short_period'], $this->params['price_index']);
+            $longSMA_previous = $this->calculateSMA($dtoPreviousData, $this->params['long_period'], $this->params['price_index']);
 
             // Détecter le croisement haussier (Golden Cross)
             // SMA courte était sous la SMA longue et est maintenant au-dessus
@@ -65,20 +74,19 @@ class MovingAverageStrategy implements StrategyInterface {
      * Vérifie si un croisement baissier (Death Cross) s'est produit
      * (SMA courte croise en-dessous de SMA longue)
      */
-    public function shouldSell(array $marketData, array $position): bool {
+    public function shouldSell(KlineHistory $history, array $position): bool {
         try {
             // Calculer la SMA courte et longue actuelles
-            $shortSMA_current = $this->calculateSMA($marketData, $this->params['short_period'], $this->params['price_index']);
-            $longSMA_current = $this->calculateSMA($marketData, $this->params['long_period'], $this->params['price_index']);
+            $shortSMA_current = $this->calculateSMA($history, $this->params['short_period'], $this->params['price_index']);
+            $longSMA_current = $this->calculateSMA($history, $this->params['long_period'], $this->params['price_index']);
 
             // Si nous n'avons pas assez de données pour les calculs précédents, on ne peut pas détecter un croisement
-            if (count($marketData) <= $this->params['long_period']) {
+            if ($history->count() <= $this->params['long_period']) {
                 return false;
             }
 
             // Créer un ensemble de données sans la dernière bougie pour calculer les SMA précédentes
-            $previousData = array_slice($marketData, 0, -1);
-
+            $previousData = $history->slice(-1);
             // Calculer la SMA courte et longue précédentes
             $shortSMA_previous = $this->calculateSMA($previousData, $this->params['short_period'], $this->params['price_index']);
             $longSMA_previous = $this->calculateSMA($previousData, $this->params['long_period'], $this->params['price_index']);

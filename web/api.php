@@ -345,7 +345,7 @@ switch ($action) {
                     $api = new Kwizer15\TradingBot\BinanceAPI($config);
 
                     $baseCurrency = $_GET['base_currency'] ?? 'USDT';
-                    $symbols = $api->getExchangeInfo($baseCurrency);
+                    $symbols = $api->getAvailableSymbols($baseCurrency);
 
                     // Filtrer les stablecoins si demandé
                     if (isset($_GET['filter_stablecoins']) && $_GET['filter_stablecoins'] === 'true') {

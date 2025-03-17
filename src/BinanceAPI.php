@@ -2,6 +2,8 @@
 
 namespace Kwizer15\TradingBot;
 
+use AllowDynamicProperties;
+
 class BinanceAPI {
     private $apiKey;
     private $apiSecret;
@@ -9,6 +11,7 @@ class BinanceAPI {
     private $realBaseUrl;
     private $baseUrl;
     private $testMode;
+    private $exchangeInfo;
 
     public function __construct(array $config) {
         $this->apiKey = $config['api']['key'];
@@ -30,6 +33,7 @@ class BinanceAPI {
      * Version corrigée pour prendre en compte startTime et endTime
      */
     public function getKlines($symbol, $interval = '1h', $limit = 100, $startTime = null, $endTime = null) {
+
         $endpoint = 'v3/klines';
         $params = [
             'symbol' => $symbol,
@@ -90,13 +94,13 @@ class BinanceAPI {
             'symbol' => $symbol,
             'side' => $side,        // BUY ou SELL
             'type' => $type,        // LIMIT, MARKET, STOP_LOSS, etc.
-            'quantity' => $quantity,
+            'quantity' => $this->getQuantity($symbol, $quantity),
             'timestamp' => $this->getTimestamp()
         ];
 
         if ($type === 'LIMIT') {
             $params['timeInForce'] = 'GTC';  // Good Till Canceled
-            $params['price'] = $price;
+            $params['price'] = $this->getPrice($symbol, $price);
         }
 
         return $this->makeRequest($endpoint, $params, 'POST', true);
@@ -167,14 +171,11 @@ class BinanceAPI {
      * @param string $baseCurrency Devise de base (ex: USDT, BTC)
      * @return array Liste des symboles disponibles
      */
-    public function getExchangeInfo($baseCurrency = null) {
-        $endpoint = 'v3/exchangeInfo';
-        $result = $this->makeRequest($endpoint, [], 'GET', false);
-
+    public function getAvailableSymbols(string $baseCurrency) {
+        $result = $this->getExchangeInfo();
         $symbols = [];
 
-        if (isset($result['symbols'])) {
-            foreach ($result['symbols'] as $symbol) {
+            foreach (($result['symbols'] ?? []) as $symbol) {
                 // Vérifier si le symbole est actif pour le trading
                 if ($symbol['status'] === 'TRADING') {
                     // Si une devise de base est spécifiée, filtrer les paires qui se terminent par cette devise
@@ -191,7 +192,6 @@ class BinanceAPI {
                         }
                     }
                 }
-            }
         }
 
         return $symbols;
@@ -299,5 +299,104 @@ class BinanceAPI {
      */
     private function getTimestamp() {
         return round(microtime(true) * 1000);
+    }
+
+    private function getQuantity(string $currentSymbol, float $quantity): string
+    {
+        $info = $this->getExchangeInfo();
+        $lotSize = [];
+        foreach ($info['symbols'] as $symbol) {
+            if ($symbol['symbol'] !== $currentSymbol) {
+                continue;
+            }
+
+            foreach ($symbol['filters'] as $filter) {
+                if ($filter['filterType'] === 'LOT_SIZE') {
+                    $lotSize = $filter;
+                    break 2;
+                }
+            }
+        }
+        if ([] === $lotSize) {
+            throw new \Exception('Pas de lot size pour la paire ' . $currentSymbol);
+        }
+
+        $minQty = (float)$lotSize["minQty"];
+        $maxQty = (float)$lotSize["maxQty"];
+        $stepSize = (float)$lotSize["stepSize"];
+
+        // Vérification si qty est dans les limites
+        if ($quantity < $minQty) {
+            return $minQty;
+        }
+
+        if ($quantity > $maxQty) {
+            return $maxQty;
+        }
+
+        // Arrondir en fonction du stepSize
+        // Formule : floor(qty / stepSize) * stepSize
+        $adjustedQty = floor($quantity / $stepSize) * $stepSize;
+
+        // Précision pour éviter les problèmes de nombre à virgule flottante
+        $precision = strlen(substr(strrchr($stepSize, "."), 1));
+
+        return round($adjustedQty, $precision);
+    }
+
+    private function getPrice(string $currentSymbol, float $price): string
+    {
+        $info = $this->getExchangeInfo();
+        $priceFilter = [];
+        foreach ($info['symbols'] as $symbol) {
+            if ($symbol['symbol'] !== $currentSymbol) {
+                continue;
+            }
+
+            foreach ($symbol['filters'] as $filter) {
+                if ($filter['filterType'] === 'PRICE_FILTER') {
+                    $priceFilter = $filter;
+                    break 2;
+                }
+            }
+        }
+
+        if ([] === $priceFilter) {
+            throw new \Exception('Pas de price filter pour la paire ' . $currentSymbol);
+        }
+
+        $minPrice = (float)$priceFilter["minPrice"];
+        $maxPrice = (float)$priceFilter["maxPrice"];
+        $tickSize = (float)$priceFilter["tickSize"];
+
+        // Vérification si qty est dans les limites
+        if ($price < $minPrice) {
+            return $minPrice;
+        }
+
+        if ($price > $maxPrice) {
+            return $maxPrice;
+        }
+
+        // Arrondir en fonction du stepSize
+        // Formule : floor(qty / stepSize) * stepSize
+        $adjustedPrice = floor($price / $tickSize) * $tickSize;
+
+        // Précision pour éviter les problèmes de nombre à virgule flottante
+        $precision = strlen(substr(strrchr($tickSize, "."), 1));
+
+        return round($adjustedPrice, $precision);
+    }
+
+    /**
+     * @return mixed
+     * @throws \Exception
+     */
+    private function getExchangeInfo(): mixed
+    {
+        $endpoint = 'v3/exchangeInfo';
+        $this->exchangeInfo ??= $this->makeRequest($endpoint, [], 'GET', false);
+
+        return $this->exchangeInfo;
     }
 }

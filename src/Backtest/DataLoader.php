@@ -41,14 +41,6 @@ class DataLoader {
             // Calculer l'heure de fin pour cette requête
             $currentEndTime = min($endTime, $currentStartTime + ($limit * $this->getIntervalInMilliseconds($interval)));
 
-            $params = [
-                'symbol' => $symbol,
-                'interval' => $interval,
-                'limit' => $limit,
-                'startTime' => $currentStartTime,
-                'endTime' => $currentEndTime
-            ];
-
             try {
                 // Effectuer la requête API
                 $response = $this->binanceAPI->getKlines($symbol, $interval, $limit, $currentStartTime, $currentEndTime);

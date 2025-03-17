@@ -5,6 +5,7 @@ require __DIR__ . '/vendor/autoload.php';
 use Kwizer15\TradingBot\Backtest\BacktestEngine;
 use Kwizer15\TradingBot\Backtest\DataLoader;
 use Kwizer15\TradingBot\BinanceAPI;
+use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\Strategy\StrategyFactory;
 
 // Options pour getopt
@@ -80,14 +81,14 @@ if (!file_exists($dataFile) || $download) {
 
     echo "Période: de {$startDate} à {$endDate}\n";
 
-    $historicalData = $dataLoader->downloadHistoricalData($symbol, '1h', $startDate, $endDate);
+    $downloadedHistoricalData = $dataLoader->downloadHistoricalData($symbol, '1h', $startDate, $endDate);
 
-    if (count($historicalData) === 0) {
+    if ($downloadedHistoricalData === []) {
         die("Erreur: Aucune donnée historique n'a pu être téléchargée. Vérifiez les dates et le symbole.\n");
     }
 
     // Sauvegarder les données dans un fichier CSV
-    $dataLoader->saveToCSV($historicalData, $dataFile);
+    $dataLoader->saveToCSV($downloadedHistoricalData, $dataFile);
 
     echo "Données historiques sauvegardées dans {$dataFile}\n";
 } else {
@@ -95,11 +96,11 @@ if (!file_exists($dataFile) || $download) {
 }
 
 // Charger les données historiques
-$historicalData = $dataLoader->loadFromCSV($dataFile);
+$dtoHistoricalData = KlineHistory::create($dataLoader->loadFromCSV($dataFile));
 
-echo "Données chargées : " . count($historicalData) . " points, du " .
-    date('Y-m-d H:i:s', $historicalData[0][0]/1000) . " au " .
-    date('Y-m-d H:i:s', $historicalData[count($historicalData)-1][0]/1000) . "\n";
+echo "Données chargées : " . $dtoHistoricalData->count() . " points, du " .
+    date('Y-m-d H:i:s', $dtoHistoricalData->first()->openTime/1000) . " au " .
+    date('Y-m-d H:i:s', $dtoHistoricalData->last()->openTime/1000) . "\n";
 
 // Déterminer la stratégie à tester
 
@@ -132,7 +133,7 @@ if (isset($options['params'])) {
 }
 
 // Créer le moteur de backtest
-$backtester = new BacktestEngine($strategy, $historicalData, $config, $symbol);
+$backtester = new BacktestEngine($strategy, $dtoHistoricalData, $config, $symbol);
 
 // Exécuter le backtest
 echo "Exécution du backtest...\n";

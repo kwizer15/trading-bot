@@ -2,35 +2,36 @@
 
 namespace Kwizer15\TradingBot\Backtest;
 
+use Kwizer15\TradingBot\DTO\KlineHistory;
+use Kwizer15\TradingBot\Strategy\PositionAction;
+use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
 
 class BacktestEngine {
-    private $strategy;
-    private $data;
-    private $config;
-    private $symbol;
-    private $balance;
-    private $positions = [];
-    private $trades = [];
-    private $equity = [];
-    private $fees = 0.1; // 0.1% de frais par transaction
-    public function __construct(StrategyInterface $strategy, array $data, array $config, string $symbol = 'BTCUSDT') {
-        $this->strategy = $strategy;
-        $this->data = $data;
-        $this->config = $config;
+    private float $balance;
+    private array $positions = [];
+    private array $trades = [];
+    private array $equity = [];
+    private float $fees = 0.1; // 0.1% de frais par transaction
+    public function __construct(
+        private readonly StrategyInterface $strategy,
+        private readonly KlineHistory      $history,
+        private readonly array             $config,
+        private readonly string            $symbol = 'BTCUSDT'
+    ) {
         $this->balance = $config['backtest']['initial_balance'];
-        $this->symbol = $symbol;
     }
 
     /**
      * Simule un achat pendant le backtest
      */
-    private function buy($symbol, $price, $timestamp) {
+    private function buy(string $symbol, float $price, int $timestamp): void
+    {
         $investment = $this->config['trading']['investment_per_trade'];
 
         // Vérifier si nous avons assez de fonds
         if ($this->balance < $investment) {
-            return false;
+            return;
         }
 
         // Calculer les frais
@@ -53,17 +54,16 @@ class BacktestEngine {
             'profit_loss' => -$fee,
             'profit_loss_pct' => -($fee / $investment) * 100
         ];
-
-        return true;
     }
 
     /**
      * Simule une vente pendant le backtest
      */
-    private function sell($symbol, $price, $timestamp) {
+    private function sell(string $symbol, float $price, int $timestamp): void
+    {
         // Vérifier si nous avons cette position
         if (!isset($this->positions[$symbol])) {
-            return false;
+            return;
         }
 
         $position = $this->positions[$symbol];
@@ -99,24 +99,24 @@ class BacktestEngine {
 
         // Supprimer la position
         unset($this->positions[$symbol]);
-
-        return true;
     }
 
-    public function run() {
+    public function run(): array
+    {
         $initialBalance = $this->balance;
         $startTime = microtime(true);
 
         $this->equity[] = [
-            'timestamp' => $this->data[0][0], // Timestamp de la première bougie
+            'timestamp' => $this->history->first()->openTime, // Timestamp de la première bougie
             'equity' => $this->balance
         ];
 
         // Parcourir les données historiques
-        for ($i = max($this->strategy->getParameters()['long_period'] ?? 0, $this->strategy->getParameters()['period'] ?? 0) + 1; $i < count($this->data); $i++) {
-            $currentData = array_slice($this->data, 0, $i + 1);
-            $currentPrice = floatval($this->data[$i][4]); // Prix de clôture
-            $timestamp = $this->data[$i][0]; // Timestamp
+        $countData = $this->history->count();
+        for ($i = max($this->strategy->getParameters()['long_period'] ?? 0, $this->strategy->getParameters()['period'] ?? 0) + 1; $i < $countData; $i++) {
+            $currentData = $this->history->slice($i + 1);
+            $currentPrice = $this->history->get($i)->close;
+            $timestamp = $this->history->get($i)->openTime;
 
             // Mettre à jour la valeur des positions ouvertes
             foreach ($this->positions as $symbol => $position) {
@@ -130,18 +130,18 @@ class BacktestEngine {
             // Vérifier les signaux de vente pour les positions ouvertes
             foreach ($this->positions as $symbol => $position) {
                 // Vérifier si la stratégie supporte getPositionAction
-                if (method_exists($this->strategy, 'getPositionAction')) {
+                if ($this->strategy instanceof PositionActionStrategyInterface) {
                     $action = $this->strategy->getPositionAction($currentData, $position);
 
                     switch ($action) {
-                        case 'SELL':
+                        case PositionAction::SELL:
                             $this->sell($symbol, $currentPrice, $timestamp);
                             break;
 
-                        case 'INCREASE_POSITION':
+                        case PositionAction::INCREASE_POSITION:
                             // Simuler une augmentation de position
                             $additionalInvestment = min(
-                                $this->config['trading']['investment_per_trade'] * 0.5,
+                                $this->config['trading']['investment_per_trade'] * ($this->strategy->calculateIncreasePercentage($currentData, $position) / 100),
                                 $this->balance
                             );
 
@@ -153,26 +153,20 @@ class BacktestEngine {
                                 $additionalQuantity = ($additionalInvestment - $fee) / $currentPrice;
 
                                 // Mettre à jour le solde
-                                $this->balance -= $additionalInvestment;
+                                $this->balance += -$additionalInvestment;
 
                                 // Mettre à jour la position
                                 $newQuantity = $position['quantity'] + $additionalQuantity;
                                 $newCost = $position['cost'] + $additionalInvestment;
-                                $newEntryPrice = $newCost / $newQuantity;
 
-                                $this->positions[$symbol]['quantity'] = $newQuantity;
-                                $this->positions[$symbol]['cost'] = $newCost;
+                                $newEntryPrice = $newCost / $newQuantity;
                                 $this->positions[$symbol]['entry_price'] = $newEntryPrice;
-                                $this->positions[$symbol]['current_value'] = $newQuantity * $currentPrice;
-                                $this->positions[$symbol]['profit_loss'] = ($newQuantity * $currentPrice) - $newCost;
-                                $this->positions[$symbol]['profit_loss_pct'] = (($newQuantity * $currentPrice) - $newCost) / $newCost * 100;
+                                $this->updatePosition($symbol, $newQuantity, $newCost, $currentPrice);
                             }
                             break;
 
-                        case 'PARTIAL_EXIT':
-                            // Simuler une sortie partielle
-                            $exitPercentage = 30; // Pourcentage par défaut
-                            $position = $this->positions[$symbol];
+                        case PositionAction::PARTIAL_EXIT:
+                            $exitPercentage = $this->strategy->calculateExitPercentage($currentData, $position);
 
                             // Calculer la quantité à vendre
                             $quantityToSell = $position['quantity'] * ($exitPercentage / 100);
@@ -188,21 +182,18 @@ class BacktestEngine {
 
                             // Mettre à jour la position
                             $remainingQuantity = $position['quantity'] - $quantityToSell;
-                            $remainingCost = $position['cost'] * ($remainingQuantity / $position['quantity']);
 
                             if ($remainingQuantity > 0) {
-                                $this->positions[$symbol]['quantity'] = $remainingQuantity;
-                                $this->positions[$symbol]['cost'] = $remainingCost;
-                                $this->positions[$symbol]['current_value'] = $remainingQuantity * $currentPrice;
-                                $this->positions[$symbol]['profit_loss'] = ($remainingQuantity * $currentPrice) - $remainingCost;
-                                $this->positions[$symbol]['profit_loss_pct'] = (($remainingQuantity * $currentPrice) - $remainingCost) / $remainingCost * 100;
+                                $remainingCost = $position['cost'] * ($remainingQuantity / $position['quantity']);
+
+                                $this->updatePosition($symbol, $remainingQuantity, $remainingCost, $currentPrice);
                             } else {
                                 // Si toute la position est vendue, c'est équivalent à un SELL
                                 $this->sell($symbol, $currentPrice, $timestamp);
                             }
                             break;
 
-                        case 'HOLD':
+                        case PositionAction::HOLD:
                         default:
                             // Ne rien faire
                             break;
@@ -218,7 +209,7 @@ class BacktestEngine {
             // Vérifier le signal d'achat si nous avons des fonds disponibles
             if ($this->balance > $this->config['trading']['investment_per_trade'] &&
                 count($this->positions) < ($this->config['trading']['max_open_positions'] ?? 1)) {
-                if ($this->strategy->shouldBuy($currentData)) {
+                if ($this->strategy->shouldBuy($currentData, $symbol)) {
                     $this->buy($this->symbol, $currentPrice, $timestamp);
                 }
             }
@@ -236,8 +227,9 @@ class BacktestEngine {
         }
 
         // Clôturer toutes les positions à la fin du backtest
-        $lastPrice = floatval($this->data[count($this->data) - 1][4]);
-        $lastTimestamp = $this->data[count($this->data) - 1][0];
+        $lastData = $this->history->last();
+        $lastPrice = $lastData->close;
+        $lastTimestamp = $lastData->openTime;
 
         foreach ($this->positions as $symbol => $position) {
             $this->sell($symbol, $lastPrice, $lastTimestamp);
@@ -324,5 +316,14 @@ class BacktestEngine {
             'trades' => $this->trades,
             'equity_curve' => $this->equity
         ];
+    }
+
+    private function updatePosition(string $symbol, float $quantity, float $cost, float $currentPrice): void
+    {
+        $this->positions[$symbol]['quantity'] = $quantity;
+        $this->positions[$symbol]['cost'] = $cost;
+        $this->positions[$symbol]['current_value'] = $quantity * $currentPrice;
+        $this->positions[$symbol]['profit_loss'] = ($quantity * $currentPrice) - $cost;
+        $this->positions[$symbol]['profit_loss_pct'] = (($quantity * $currentPrice) - $cost) / $cost * 100;
     }
 }
