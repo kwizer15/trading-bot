@@ -2,24 +2,56 @@
 
 namespace Kwizer15\TradingBot\Configuration;
 
-final class TradingConfiguration
+final readonly class TradingConfiguration
 {
 
     /** @var string[] */
-    public readonly array $symbols;
-    public readonly float $investmentPerTrade;
-    public readonly int $maxOpenPositions;
-    public readonly string $baseCurrency;
-    public readonly float $stopLossPercentage;
-    public readonly float $takeProfitPercentage;
+    public array $symbols;
+    public float $investmentPerTrade;
+    public int $maxOpenPositions;
+    public string $baseCurrency;
+    public float $stopLossPercentage;
+    public float $takeProfitPercentage;
 
 
-    public function __construct(array $config) {
-        $this->symbols = $config['trading']['symbols'];
-        $this->baseCurrency = $config['trading']['base_currency'];
-        $this->stopLossPercentage = $config['trading']['stop_loss_percentage'];
-        $this->takeProfitPercentage = $config['trading']['take_profit_percentage'];
-        $this->investmentPerTrade = $config['trading']['investment_per_trade'];
+    public function __construct(private array $config) {
+        $this->symbols = $config['trading']['symbols'] ?? ['BTC', 'ETH', 'BNB'];
+        $this->baseCurrency = $config['trading']['base_currency'] ?? 'USDT';
+        $this->stopLossPercentage = $config['trading']['stop_loss_percentage'] ?? 2.5;
+        $this->takeProfitPercentage = $config['trading']['take_profit_percentage'] ?? 5;
+        $this->investmentPerTrade = $config['trading']['investment_per_trade'] ?? 100;
         $this->maxOpenPositions = $config['trading']['max_open_positions'] ?? 1;
+    }
+
+    public function withInvestmentPerTrade(mixed $investmentPerTrade): self
+    {
+        return new self([
+            'trading' => [
+                'investment_per_trade' => $investmentPerTrade,
+            ] + $this->config['trading']
+        ] + $this->config);
+    }
+
+    public function withStopLossPercentage(mixed $stopLossPercentage): self
+    {
+        return new self([
+                'trading' => [
+                        'stop_loss_percentage' => $stopLossPercentage,
+                    ] + $this->config['trading']
+            ] + $this->config);
+    }
+
+    public function withTakeProfitPercentage(mixed $takeProfitPercentage): self
+    {
+        return new self([
+                'trading' => [
+                        'take_profit_percentage' => $takeProfitPercentage,
+                    ] + $this->config['trading']
+            ] + $this->config);
+    }
+
+    public function toArray(): array
+    {
+        return $this->config['trading'];
     }
 }

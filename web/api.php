@@ -1,6 +1,7 @@
 <?php
 
 use Kwizer15\TradingBot\Configuration\ApiConfiguration;
+use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -107,9 +108,9 @@ switch ($action) {
             }
 
             $strategy = $_POST['strategy'];
-            $symbol = isset($_POST['symbol']) ? $_POST['symbol'] : 'BTCUSDT';
-            $period_start = isset($_POST['period_start']) ? $_POST['period_start'] : date('Y-m-d', strtotime('-1 year'));
-            $period_end = isset($_POST['period_end']) ? $_POST['period_end'] : date('Y-m-d');
+            $symbol = $_POST['symbol'] ?? 'BTCUSDT';
+            $period_start = $_POST['period_start'] ?? date('Y-m-d', strtotime('-1 year'));
+            $period_end = $_POST['period_end'] ?? date('Y-m-d');
             $initial_balance = isset($_POST['initial_balance']) ? floatval($_POST['initial_balance']) : 1000;
             $download_data = isset($_POST['download_data']) && $_POST['download_data'] == '1';
 
@@ -134,34 +135,32 @@ switch ($action) {
             $config_file = BOT_PATH . '/config/config.php';
             $current_config = require $config_file;
             $backtest_config = $current_config;
+            $backtestConfig = (new BacktestConfiguration($current_config))
+                ->withInitialBalance($initial_balance)
+                ->withPeriod($period_start, $period_end)
+            ;
 
-            // Mettre à jour la configuration pour le backtest
-            $backtest_config['backtest']['start_date'] = $period_start;
-            $backtest_config['backtest']['end_date'] = $period_end;
-            $backtest_config['backtest']['initial_balance'] = $initial_balance;
-
+            $tradingConfiguration = $backtestConfig->tradingConfiguration;
             // Ajouter les paramètres spécifiques au trading si présents
             if (isset($strategy_params['investment_per_trade'])) {
-                $backtest_config['trading']['investment_per_trade'] = $strategy_params['investment_per_trade'];
+                $tradingConfiguration = $tradingConfiguration->withInvestmentPerTrade($strategy_params['investment_per_trade']);
                 // Ne pas passer ce paramètre à la stratégie
                 unset($strategy_params['investment_per_trade']);
             }
 
             if (isset($strategy_params['stop_loss_percentage'])) {
-                $backtest_config['trading']['stop_loss_percentage'] = $strategy_params['stop_loss_percentage'];
+                $tradingConfiguration = $tradingConfiguration->withStopLossPercentage($strategy_params['stop_loss_percentage']);
                 // Ne pas passer ce paramètre à la stratégie
                 unset($strategy_params['stop_loss_percentage']);
             }
 
             if (isset($strategy_params['take_profit_percentage'])) {
-                $backtest_config['trading']['take_profit_percentage'] = $strategy_params['take_profit_percentage'];
+                $tradingConfiguration = $tradingConfiguration->withTakeProfitPercentage($strategy_params['take_profit_percentage']);
                 // Ne pas passer ce paramètre à la stratégie
                 unset($strategy_params['take_profit_percentage']);
             }
 
-            // Sauvegarder temporairement la configuration
-            $temp_config_file = BOT_PATH . '/config/temp_backtest_config.php';
-            file_put_contents($temp_config_file, '<?php return ' . var_export($backtest_config, true) . ';');
+            $backtestConfig->withTradingConfiguration($tradingConfiguration)->export();
 
             // Préparer le dossier pour les données historiques
             $data_dir = BOT_PATH . '/data/historical';
@@ -192,7 +191,7 @@ switch ($action) {
             }
 
             // Ajouter le chemin de la configuration temporaire
-            $command .= ' --config=' . escapeshellarg($temp_config_file);
+            $command .= ' --config=' . escapeshellarg($backtestConfig->exportPath());
 
             // Journaliser la commande complète pour le débogage
             error_log("Executing command: " . $command);
@@ -202,10 +201,7 @@ switch ($action) {
             $return_var = 0;
             exec($command . ' 2>&1', $output, $return_var);
 
-            // Supprimer la configuration temporaire
-            if (file_exists($temp_config_file)) {
-                unlink($temp_config_file);
-            }
+            $backtestConfig->clearExport();
 
             if ($return_var !== 0) {
                 send_json_response([

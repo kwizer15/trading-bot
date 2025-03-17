@@ -2,14 +2,14 @@
 
 namespace Kwizer15\TradingBot\DTO;
 
-class KlineHistory
+final readonly class KlineHistory
 {
     /**
      * @param non-empty-array<Kline> $data
      */
     private function __construct(
-        private readonly array $originalData,
-        private readonly array $data
+        private array $originalData,
+        private array $data
     ) {
     }
 

@@ -2,17 +2,16 @@
 
 namespace Kwizer15\TradingBot\DTO;
 
-class Kline
+final readonly class Kline
 {
-
     public function __construct(
-        public readonly int   $openTime,
-        public readonly float $open,
-        public readonly float $high,
-        public readonly float $low,
-        public readonly float $close,
-        public readonly float $volume,
-        public readonly int   $closeTime
+        public int   $openTime,
+        public float $open,
+        public float $high,
+        public float $low,
+        public float $close,
+        public float $volume,
+        public int   $closeTime
     )
     {
 

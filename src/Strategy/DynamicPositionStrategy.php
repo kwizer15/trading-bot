@@ -24,7 +24,6 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
 
     // Stockage des positions avec leurs données
     private $positionData = [];
-    private $currentSymbol = null; // Pour stocker temporairement le symbole en cours d'analyse
 
     public function __construct() {
         // Initialiser les données de position

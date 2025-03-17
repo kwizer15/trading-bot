@@ -118,5 +118,3 @@ if ($mode === 'daemon') {
         $logger->error( 'Erreur: ' . $e->getMessage());
     }
 }
-
-// Classe Logger originale

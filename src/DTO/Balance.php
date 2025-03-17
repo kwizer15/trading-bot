@@ -2,11 +2,11 @@
 
 namespace Kwizer15\TradingBot\DTO;
 
-final class Balance
+final readonly class Balance
 {
     public function __construct(
-        public readonly float $free = 0,
-        public readonly float $locked = 0,
+        public float $free = 0,
+        public float $locked = 0,
     ) {
     }
 }
