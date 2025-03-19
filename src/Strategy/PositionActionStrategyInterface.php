@@ -19,4 +19,9 @@ interface PositionActionStrategyInterface extends StrategyInterface
     public function calculateIncreasePercentage(KlineHistory $marketData, array $position): float;
 
     public function calculateExitPercentage(KlineHistory $marketData, array $position): float;
+
+    public function onIncreasePosition(array $position, float $additionalInvestment, float $additionalQuantity): void;
+
+    public function onPartialExit(array $position, float $sellQuantity): void;
+
 }

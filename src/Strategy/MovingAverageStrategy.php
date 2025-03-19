@@ -122,4 +122,12 @@ class MovingAverageStrategy implements StrategyInterface {
     public function getParameters(): array {
         return $this->params;
     }
+
+    public function onSell(string $symbol, float $currentPrice): void
+    {
+    }
+
+    public function onBuy(array $position): void
+    {
+    }
 }
