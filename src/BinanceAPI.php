@@ -71,14 +71,15 @@ class BinanceAPI {
     /**
      * Crée un ordre d'achat ou de vente
      */
-    public function createOrder($symbol, $side, $type, $quantity, $price = null) {
+    public function createOrder(string $symbol, string $side, string $type, float $quantity, float $price = null) {
         $endpoint = 'v3/order';
 
+        $quantity1 = $this->getQuantity($symbol, $quantity);
         $params = [
             'symbol' => $symbol,
             'side' => $side,        // BUY ou SELL
             'type' => $type,        // LIMIT, MARKET, STOP_LOSS, etc.
-            'quantity' => $this->getQuantity($symbol, $quantity),
+            'quantity' => $quantity1,
             'timestamp' => $this->getTimestamp()
         ];
 
@@ -282,7 +283,7 @@ class BinanceAPI {
         return round(microtime(true) * 1000);
     }
 
-    private function getQuantity(string $currentSymbol, float $quantity): string
+    public function getQuantity(string $currentSymbol, float $quantity): string
     {
         $info = $this->getExchangeInfo();
         $lotSize = [];
@@ -325,7 +326,7 @@ class BinanceAPI {
         return round($adjustedQty, $precision);
     }
 
-    private function getPrice(string $currentSymbol, float $price): string
+    public function getPrice(string $currentSymbol, float $price): string
     {
         $info = $this->getExchangeInfo();
         $priceFilter = [];

@@ -41,7 +41,6 @@ class TradingBot {
      * Augmente une position existante
      * @param string $symbol Symbole de la paire
      * @param float $additionalInvestment Montant supplémentaire à investir
-     * @return bool Succès de l'opération
      */
     public function increasePosition(string $symbol, float $additionalInvestment): void {
         try {
@@ -439,5 +438,9 @@ class TradingBot {
             $this->logger->error( "Erreur lors de la vente de {$symbol}: " . $e->getMessage());
             return false;
         }
+    }
+
+    private function addTrade(array $trade): void {
+
     }
 }

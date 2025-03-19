@@ -213,7 +213,7 @@ class BacktestEngine
             // Vérifier le signal d'achat si nous avons des fonds disponibles
             if ($this->balance > $this->tradingConfiguration->investmentPerTrade &&
                 count($this->positions) < ($this->tradingConfiguration->maxOpenPositions)) {
-                if ($this->strategy->shouldBuy($currentData, $symbol)) {
+                if ($this->strategy->shouldBuy($currentData, $this->symbol)) {
                     $this->buy($this->symbol, $currentPrice, $timestamp);
                 }
             }

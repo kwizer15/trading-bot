@@ -49,24 +49,23 @@
         <div class="card-body log-container">
             <?php
             $logs = get_logs();
-
-            if (empty($logs)):
-                ?>
-                <div class="alert alert-info">Aucun log disponible.</div>
-            <?php else: ?>
-                <?php foreach ($logs as $log): ?>
-                    <div class="log-line log-line-<?php echo strtolower($log['level']); ?>" data-level="<?php echo strtolower($log['level']); ?>">
-                        <small class="text-muted">[<?php echo $log['timestamp']; ?>]</small>
-                        <span class="badge bg-<?php
-                        echo strtolower($log['level']) === 'info' ? 'primary' :
-                            (strtolower($log['level']) === 'warning' ? 'warning' :
-                                (strtolower($log['level']) === 'error' ? 'danger' : 'secondary'));
-                        ?>">
-                            <?php echo strtoupper($log['level']); ?>
-                        </span>
-                        <?php echo htmlspecialchars($log['message']); ?>
+            $hasLog = false;
+            foreach ($logs as $log): ?>
+                <?php $hasLog = true; ?>
+                <div class="log-line log-line-<?php echo strtolower($log['level']); ?>" data-level="<?php echo strtolower($log['level']); ?>">
+                    <small class="text-muted">[<?php echo $log['timestamp']; ?>]</small>
+                    <span class="badge bg-<?php
+                    echo strtolower($log['level']) === 'info' ? 'primary' :
+                        (strtolower($log['level']) === 'warning' ? 'warning' :
+                            (strtolower($log['level']) === 'error' ? 'danger' : 'secondary'));
+                    ?>">
+                        <?php echo strtoupper($log['level']); ?>
+                    </span>
+                    <?php echo htmlspecialchars($log['message']); ?>
                     </div>
-                <?php endforeach; ?>
+            <?php endforeach;
+                  if (!$hasLog): ?>
+            <div class="alert alert-info">Aucun log disponible.</div>
             <?php endif; ?>
         </div>
     </div>
