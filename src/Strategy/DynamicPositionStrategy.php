@@ -23,7 +23,7 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
     ];
 
     // Stockage des positions avec leurs données
-    private $positionData = [];
+    private array $positionData = [];
 
     public function __construct() {
         // Initialiser les données de position
@@ -105,7 +105,7 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
             $this->positionData[$symbol]['last_analysis_time'] = $currentTime;
 
             // Récupérer le prix d'entrée moyen et le prix actuel
-            $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity']);
+            $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['total_quantity']);
 
             // Calculer la performance actuelle
             $performancePct = (($currentPrice - $entryPrice) / $entryPrice) * 100;
