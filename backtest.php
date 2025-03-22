@@ -2,14 +2,17 @@
 
 require __DIR__ . '/vendor/autoload.php';
 
+use Kwizer15\TradingBot\Backtest\BacktestBinanceAPI;
 use Kwizer15\TradingBot\Backtest\BacktestEngine;
 use Kwizer15\TradingBot\Backtest\DataLoader;
 use Kwizer15\TradingBot\BinanceAPI;
+use Kwizer15\TradingBot\Clock\FixedClock;
 use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\Strategy\StrategyFactory;
+use Kwizer15\TradingBot\TradingBot;
 
 // Options pour getopt
 $short_options = "";
@@ -17,6 +20,7 @@ $long_options = [
     "strategy:",       // --download
     "download",       // --download
     "symbol:",        // --symbol=value
+//    "symbols:",       // --symbols=value1,value2
     "params",         // --params
     "config:",        // --config=value
     "start-date:",    // --start-date=value
@@ -33,6 +37,7 @@ if (isset($argv[1]) && $argv[1] === '--help') {
     echo "  --strategy=STRATEGY          Strategie à utiliser\n";
     echo "  --download                   Télécharger de nouvelles données historiques\n";
     echo "  --symbol=SYMBOL              Symbole à tester (ex: BTCUSDT)\n";
+//    echo "  --symbols=SYMBOL             Liste des symboles à tester (ex: BTCUSDT,ETHUSDT)\n";
     echo "  --params key1=value1 key2=value2  Paramètres de stratégie\n";
     echo "  --config=FILE                Utiliser un fichier de configuration alternatif\n";
     echo "  --start-date=DATE            Date de début (format: YYYY-MM-DD)\n";
@@ -41,26 +46,17 @@ if (isset($argv[1]) && $argv[1] === '--help') {
 }
 
 // Vérifier si un fichier de configuration alternatif est spécifié
-if (isset($options['config'])) {
-    $config_file = $options['config'];
-    if (file_exists($config_file)) {
-        $config = require $config_file;
-    } else {
-        die("Erreur: Fichier de configuration spécifié introuvable: {$config_file}\n");
-    }
-} else {
-    // Charger la configuration par défaut
-    $config = require __DIR__ . '/config/config.php';
+$options['config'] ??= __DIR__ . '/config/config.php';
+$config_file = $options['config'];
+if (!is_readable($config_file)) {
+    die("Erreur: Fichier de configuration spécifié introuvable: {$config_file}\n");
 }
+
+$config = require $config_file;
 
 // Écraser les dates si spécifiées en ligne de commande
-if (isset($options['start-date'])) {
-    $config['backtest']['start_date'] = $options['start-date'];
-}
-
-if (isset($options['end-date'])) {
-    $config['backtest']['end_date'] = $options['end-date'];
-}
+$config['backtest']['start_date'] = $options['start-date'] ?? $config['backtest']['start_date'];
+$config['backtest']['end_date'] = $options['end-date'] ?? $config['backtest']['end_date'];
 
 // Créer l'instance de l'API Binance
 $binanceAPI = new BinanceAPI(new ApiConfiguration($config));
@@ -69,13 +65,13 @@ $binanceAPI = new BinanceAPI(new ApiConfiguration($config));
 $dataLoader = new DataLoader($binanceAPI);
 
 // Symbole à tester (par défaut BTCUSDT ou spécifié en argument)
-$symbol = isset($options['symbol']) ? $options['symbol'] : 'BTCUSDT';
+$symbol = $options['symbol'] ?? 'BTCUSDT';
 
 // Vérifier si les données historiques existent déjà
 $dataFile = __DIR__ . '/data/historical/' . $symbol . '_1h.csv';
 $download = isset($options['download']);
 
-if (!file_exists($dataFile) || $download) {
+if ($download || !file_exists($dataFile)) {
     echo "Téléchargement des données historiques pour {$symbol}...\n";
 
     // Télécharger les données historiques
@@ -102,14 +98,29 @@ if (!file_exists($dataFile) || $download) {
 $dtoHistoricalData = KlineHistory::create($dataLoader->loadFromCSV($dataFile));
 
 echo "Données chargées : " . $dtoHistoricalData->count() . " points, du " .
-    date('Y-m-d H:i:s', $dtoHistoricalData->first()->openTime/1000) . " au " .
-    date('Y-m-d H:i:s', $dtoHistoricalData->last()->openTime/1000) . "\n";
+    $dtoHistoricalData->from() . " au " .
+    $dtoHistoricalData->to() . "\n";
 
 // Déterminer la stratégie à tester
 
+$clock = new FixedClock();
+
+// Configurer les paramètres de la stratégie s'ils sont fournis
+$options['params'] ??= '';
+$params = [];
+
+$listParams = explode(' ', $options['params']);
+// Récupérer les paramètres à partir des arguments de ligne de commande
+foreach ($listParams as $param) {
+    if (str_contains($param, '=')) {
+        [$key, $value] = explode('=', $param);
+        $params[$key] = is_numeric($value) ? (float) $value : $value;
+    }
+}
+
 $strategyName = $options['strategy'] ?? 'MovingAverageStrategy';
 try {
-    $strategy = (new StrategyFactory())->create($strategyName);
+    $strategy = (new StrategyFactory())->create($strategyName, $params);
 
     echo "Utilisation de la stratégie {$strategyName}\n";
 } catch (Exception $e) {
@@ -117,29 +128,18 @@ try {
     exit(1);
 }
 
-// Configurer les paramètres de la stratégie s'ils sont fournis
-if (isset($options['params'])) {
-    $params = [];
-
-    // Récupérer les paramètres à partir des arguments de ligne de commande
-    for ($i = 2; $i < $argc; $i++) {
-        if (strpos($argv[$i], '=') !== false) {
-            list($key, $value) = explode('=', $argv[$i]);
-            $params[$key] = is_numeric($value) ? (float) $value : $value;
-        }
-    }
-
-    if (!empty($params)) {
-        $strategy->setParameters($params);
-        echo "Paramètres personnalisés: " . json_encode($params) . "\n";
-    }
+if (!empty($params)) {
+    $strategy->setParameters($params);
+    echo "Paramètres personnalisés: " . json_encode($params) . "\n";
 }
+
+$tradingConfiguration = new TradingConfiguration($config);
 
 // Créer le moteur de backtest
 $backtester = new BacktestEngine(
     $strategy,
     $dtoHistoricalData,
-    new TradingConfiguration($config),
+    $tradingConfiguration,
     new BacktestConfiguration($config),
     $symbol,
 );
@@ -151,23 +151,23 @@ $results = $backtester->run();
 // Afficher les résultats
 echo "\nRésultats du backtest :\n";
 echo "------------------------\n";
-echo "Balance initiale : " . $results['initial_balance'] . " " . $config['trading']['base_currency'] . "\n";
-echo "Balance finale : " . $results['final_balance'] . " " . $config['trading']['base_currency'] . "\n";
-echo "Profit : " . $results['profit'] . " " . $config['trading']['base_currency'] . " (" . $results['profit_pct'] . "%)\n";
+echo "Balance initiale : " . $results['initial_balance'] . " " . $tradingConfiguration->baseCurrency . "\n";
+echo "Balance finale : " . $results['final_balance'] . " " . $tradingConfiguration->baseCurrency . "\n";
+echo "Profit : " . $results['profit'] . " " . $tradingConfiguration->baseCurrency . " (" . $results['profit_pct'] . "%)\n";
 echo "Nombre total de trades : " . $results['total_trades'] . "\n";
 echo "Trades gagnants : " . $results['winning_trades'] . "\n";
 echo "Trades perdants : " . $results['losing_trades'] . "\n";
 echo "Taux de réussite : " . $results['win_rate'] . "%\n";
 echo "Facteur de profit : " . $results['profit_factor'] . "\n";
 echo "Drawdown maximum : " . $results['max_drawdown'] . "%\n";
-echo "Frais payés : " . $results['fees_paid'] . " " . $config['trading']['base_currency'] . "\n";
+echo "Frais payés : " . $results['fees_paid'] . " " . $tradingConfiguration->baseCurrency . "\n";
 echo "Durée du backtest : " . $results['duration'] . " secondes\n";
 
 // Sauvegarder les résultats dans un fichier
 $resultFileName = str_replace(' ', '_', $strategy->getName());
 $paramHash = substr(md5(uniqid('', true)), 0, 8);
 $resultFileName .= "_" . $paramHash;
-$resultsFile = __DIR__ . '/data/results_' . $resultFileName . '.json';
+$resultsFile = __DIR__ . '/data/results_' .  $resultFileName . '.json';
 
 file_put_contents($resultsFile, json_encode($results, JSON_PRETTY_PRINT));
 

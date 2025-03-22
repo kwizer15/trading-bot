@@ -135,6 +135,9 @@ class RSIStrategy implements StrategyInterface {
         return $this->params;
     }
 
+    public function getParameter(string $key, mixed $default = null): mixed {
+        return $this->params[$key] ?? $default;
+    }
     public function onSell(string $symbol, float $currentPrice): void
     {
     }

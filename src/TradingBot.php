@@ -2,25 +2,30 @@
 
 namespace Kwizer15\TradingBot;
 
+use _PHPStan_781aefaf6\React\Http\Io\Clock;
+use Kwizer15\TradingBot\Clock\RealClock;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\DTO\PositionList;
 use Kwizer15\TradingBot\Strategy\PositionAction;
 use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
+use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 
 class TradingBot {
     private PositionList $positionList;
 
     public function __construct(
-        private readonly BinanceAPI $binanceAPI,
+        private readonly BinanceAPIInterface $binanceAPI,
         private readonly StrategyInterface $strategy,
         private readonly TradingConfiguration $tradingConfiguration,
         private readonly LoggerInterface $logger,
         private readonly ?string $positionsFile = null,
+        ?ClockInterface $clock = null
     ) {
-        $this->positionList = new PositionList($this->positionsFile, $this->logger);
+        $clock = $clock ?? new RealClock();
+        $this->positionList = new PositionList($this->positionsFile, $this->logger, $clock);
     }
 
     /**
@@ -89,8 +94,10 @@ class TradingBot {
 
     /**
      * Exécute une sortie partielle de position
+     *
      * @param string $symbol Symbole de la paire
      * @param float $exitPercentage Pourcentage de la position à vendre
+     *
      * @return bool Succès de l'opération
      */
     public function partialExit(string $symbol, float $exitPercentage): bool {
@@ -235,7 +242,7 @@ class TradingBot {
     /**
      * Cherche de nouvelles opportunités d'achat
      */
-    private function findBuyOpportunities() {
+    private function findBuyOpportunities(): void {
         // Vérifier si nous avons déjà atteint le nombre maximum de positions
         if ($this->positionList->count() >= $this->tradingConfiguration->maxOpenPositions) {
             $this->logger->info( 'Nombre maximum de positions atteint, aucun nouvel achat possible');

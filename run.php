@@ -1,6 +1,7 @@
 <?php
 
 use Kwizer15\TradingBot\BinanceAPI;
+use Kwizer15\TradingBot\Clock\RealClock;
 use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 use Kwizer15\TradingBot\Configuration\LoggingConfiguration;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
@@ -20,8 +21,10 @@ if (!is_dir(__DIR__ . '/logs')) {
 }
 
 $loggingConfig = new LoggingConfiguration($config);
+
+$clock = new RealClock();
 // Créer le logger
-$logger = new Logger($loggingConfig->file, $loggingConfig->level);
+$logger = new Logger($clock, $loggingConfig->file, $loggingConfig->level);
 
 $logger->info('Démarrage du bot de trading');
 
@@ -33,30 +36,30 @@ $options = getopt('', [
     'daemon',
     'params:',
 ]);
-// Créer la stratégie
-$strategyName = $options['strategy'] ?? 'DynamicPositionStrategy';
-try {
-    $strategy = (new StrategyFactory())->create($strategyName);
-
-    echo "Utilisation de la stratégie {$strategyName}\n";
-} catch (Exception $e) {
-    echo "Erreur lors de la création de la stratégie : " . $e->getMessage() . "\n";
-    exit(1);
-}
 
 // Vérifier si des paramètres de stratégie sont fournis
+$params = [];
 if ($options['params'] ?? []) {
     $queryString = explode(' ', $options['params']);
-    $params = [];
     foreach ($queryString as $param) {
         list($key, $value) = explode('=', $param);
         $params[$key] = is_numeric($value) ? (float) $value : $value;
     }
 
     if (!empty($params)) {
-        $strategy->setParameters($params);
         $logger->info('Paramètres personnalisés: ' . json_encode($params));
     }
+}
+
+// Créer la stratégie
+$strategyName = $options['strategy'] ?? 'DynamicPositionStrategy';
+try {
+    $strategy = (new StrategyFactory())->create($strategyName, $params);
+
+    echo "Utilisation de la stratégie {$strategyName}\n";
+} catch (Exception $e) {
+    echo "Erreur lors de la création de la stratégie : " . $e->getMessage() . "\n";
+    exit(1);
 }
 
 // Créer le bot de trading
@@ -65,7 +68,8 @@ $tradingBot = new TradingBot(
     $strategy,
     new TradingConfiguration($config),
     $logger,
-    __DIR__ . '/data/positions.json'
+    __DIR__ . '/data/positions.json',
+    $clock,
 );
 
 // Fonction pour gérer le signal de fin

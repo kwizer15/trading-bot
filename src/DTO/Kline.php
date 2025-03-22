@@ -16,4 +16,14 @@ final readonly class Kline
     {
 
     }
+
+    public function openDate(): string
+    {
+        return date('Y-m-d', $this->openTime / 1000);
+    }
+
+    public function closeDate(): string
+    {
+        return date('Y-m-d', $this->closeTime / 1000);
+    }
 }

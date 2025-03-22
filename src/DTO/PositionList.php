@@ -2,6 +2,7 @@
 
 namespace Kwizer15\TradingBot\DTO;
 
+use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 
 class PositionList
@@ -11,7 +12,8 @@ class PositionList
 
     public function __construct(
         private readonly ?string $positionsFile,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly ClockInterface $clock,
     ) {
     }
 
@@ -118,7 +120,7 @@ class PositionList
     {
         $this->load();
 
-        $timestamp ??= time() * 1000;
+        $timestamp ??= $this->clock->now()->getTimestamp() * 1000;
         $this->positions[$symbol] = [
             'symbol' => $symbol,
             'entry_price' => $currentPrice,

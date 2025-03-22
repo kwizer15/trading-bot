@@ -75,7 +75,7 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
         $symbol = $position['symbol'];
 
         // Obtenir le timestamp actuel depuis les données de marché (pour le backtest)
-        $currentTime = $history->last()->openTime;
+        $currentTime = $history->last()->closeTime;
 
         // Si nous n'avons pas de données pour cette position, l'initialiser
         if (!isset($this->positionData[$symbol])) {
@@ -421,6 +421,11 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
     public function getParameters(): array {
         return $this->params;
     }
+
+    public function getParameter(string $key, mixed $default = null): mixed {
+        return $this->params[$key] ?? $default;
+    }
+
 
     public function calculateIncreasePercentage(KlineHistory $marketData, array $position): float
     {

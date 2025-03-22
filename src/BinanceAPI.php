@@ -5,7 +5,8 @@ namespace Kwizer15\TradingBot;
 use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 use Kwizer15\TradingBot\DTO\Balance;
 
-class BinanceAPI {
+class BinanceAPI implements BinanceAPIInterface
+{
     private const BASE_URL = 'https://api.binance.com/api/';
     private const BASE_URL_TEST = 'https://testnet.binance.vision/api/';
 
@@ -71,7 +72,7 @@ class BinanceAPI {
     /**
      * Crée un ordre d'achat ou de vente
      */
-    public function createOrder(string $symbol, string $side, string $type, float $quantity, float $price = null) {
+    private function createOrder(string $symbol, string $side, string $type, float $quantity, float $price = null) {
         $endpoint = 'v3/order';
 
         $params = [
@@ -125,7 +126,7 @@ class BinanceAPI {
     /**
      * Récupère tous les ordres ouverts
      */
-    public function getOpenOrders($symbol = null) {
+    private function getOpenOrders($symbol = null) {
         $endpoint = 'v3/openOrders';
         $params = [];
 
@@ -139,7 +140,7 @@ class BinanceAPI {
     /**
      * Annule un ordre
      */
-    public function cancelOrder($symbol, $orderId) {
+    private function cancelOrder($symbol, $orderId) {
         $endpoint = 'v3/order';
         $params = [
             'symbol' => $symbol,

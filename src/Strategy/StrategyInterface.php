@@ -50,6 +50,7 @@ interface StrategyInterface {
      * @return array Paramètres actuels
      */
     public function getParameters(): array;
+    public function getParameter(string $key, mixed $default = null): mixed;
 
 
     public function onSell(string $symbol, float $currentPrice): void;

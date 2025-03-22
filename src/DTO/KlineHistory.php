@@ -58,4 +58,14 @@ final readonly class KlineHistory
     {
         return $this->originalData;
     }
+
+    public function from(): string
+    {
+        return $this->first()->openDate();
+    }
+
+    public function to(): string
+    {
+        return $this->last()->closeDate();
+    }
 }

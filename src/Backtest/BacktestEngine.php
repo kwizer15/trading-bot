@@ -2,12 +2,15 @@
 
 namespace Kwizer15\TradingBot\Backtest;
 
+use Kwizer15\TradingBot\Clock\FixedClock;
 use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\Strategy\PositionAction;
 use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
+use Kwizer15\TradingBot\TradingBot;
+use Psr\Log\NullLogger;
 
 class BacktestEngine
 {
@@ -18,10 +21,10 @@ class BacktestEngine
     private float $fees = 0.1; // 0.1% de frais par transaction
     public function __construct(
         private readonly StrategyInterface $strategy,
-        private readonly KlineHistory      $history,
+        private readonly KlineHistory $history,
         private readonly TradingConfiguration $tradingConfiguration,
         BacktestConfiguration $backtestConfiguration,
-        private readonly string            $symbol = 'BTCUSDT',
+        private readonly string $symbol = 'BTCUSDT',
     ) {
         $this->balance = $backtestConfiguration->initialBalance;
     }
@@ -117,19 +120,25 @@ class BacktestEngine
 
         // Parcourir les données historiques
         $countData = $this->history->count();
-        for ($i = max($this->strategy->getParameters()['long_period'] ?? 0, $this->strategy->getParameters()['period'] ?? 0) + 1; $i < $countData; $i++) {
+        for ($i = max($this->strategy->getParameter('long_period', 0), $this->strategy->getParameter('period', 0)) + 1; $i < $countData; $i++) {
             $currentData = $this->history->slice($i + 1);
-            $currentPrice = $this->history->get($i)->close;
-            $timestamp = $this->history->get($i)->openTime;
+            $kline = $this->history->get($i);
+            $currentPrice = $kline->close;
+            $timestamp = $kline->closeTime;
 
-            // Mettre à jour la valeur des positions ouvertes
-            foreach ($this->positions as $symbol => $position) {
-                $position['current_price'] = $currentPrice; // Ajout de current_price
-                $position['current_value'] = $position['quantity'] * $currentPrice;
-                $position['profit_loss'] = $position['current_value'] - $position['cost'];
-                $position['profit_loss_pct'] = ($position['profit_loss'] / $position['cost']) * 100;
-                $this->positions[$symbol] = $position;
-            }
+            $clock = new FixedClock(\DateTimeImmutable::createFromFormat('U', $timestamp, new \DateTimeZone('UTC')));
+            $binanceAPI = new BacktestBinanceAPI($currentData);
+
+            $tradingBot = new TradingBot(
+                $binanceAPI,
+                $this->strategy,
+                $this->tradingConfiguration,
+                new NullLogger(),
+                __DIR__ . '/data/backtest_positions.json',
+                $clock,
+            );
+
+            $tradingBot->run();
 
             // Vérifier les signaux de vente pour les positions ouvertes
             foreach ($this->positions as $symbol => $position) {
