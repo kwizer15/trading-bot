@@ -20,7 +20,7 @@ $long_options = [
     "strategy:",       // --download
     "download",       // --download
     "symbol:",        // --symbol=value
-//    "symbols:",       // --symbols=value1,value2
+    "symbols:",       // --symbols=value1,value2
     "params",         // --params
     "config:",        // --config=value
     "start-date:",    // --start-date=value
@@ -37,7 +37,7 @@ if (isset($argv[1]) && $argv[1] === '--help') {
     echo "  --strategy=STRATEGY          Strategie à utiliser\n";
     echo "  --download                   Télécharger de nouvelles données historiques\n";
     echo "  --symbol=SYMBOL              Symbole à tester (ex: BTCUSDT)\n";
-//    echo "  --symbols=SYMBOL             Liste des symboles à tester (ex: BTCUSDT,ETHUSDT)\n";
+    echo "  --symbols=SYMBOL             Liste des symboles à tester (ex: BTCUSDT,ETHUSDT)\n";
     echo "  --params key1=value1 key2=value2  Paramètres de stratégie\n";
     echo "  --config=FILE                Utiliser un fichier de configuration alternatif\n";
     echo "  --start-date=DATE            Date de début (format: YYYY-MM-DD)\n";
@@ -53,10 +53,11 @@ if (!is_readable($config_file)) {
 }
 
 $config = require $config_file;
-
+$options['symbol'] ??= 'BTC';
 // Écraser les dates si spécifiées en ligne de commande
 $config['backtest']['start_date'] = $options['start-date'] ?? $config['backtest']['start_date'];
 $config['backtest']['end_date'] = $options['end-date'] ?? $config['backtest']['end_date'];
+$config['trading']['symbols'] = $options['symbols'] ?? [$options['symbol']];
 
 // Créer l'instance de l'API Binance
 $binanceAPI = new BinanceAPI(new ApiConfiguration($config));
@@ -64,46 +65,44 @@ $binanceAPI = new BinanceAPI(new ApiConfiguration($config));
 // Créer le chargeur de données
 $dataLoader = new DataLoader($binanceAPI);
 
-// Symbole à tester (par défaut BTCUSDT ou spécifié en argument)
-$symbol = $options['symbol'] ?? 'BTCUSDT';
-
+$symbolHistoricalData = [];
+foreach ($config['trading']['symbols'] as $symbol) {
+    $pairSymbol = $symbol . $config['trading']['base_currency'];
 // Vérifier si les données historiques existent déjà
-$dataFile = __DIR__ . '/data/historical/' . $symbol . '_1h.csv';
-$download = isset($options['download']);
+    $dataFile = __DIR__ . '/data/historical/' . $pairSymbol . '_1h.csv';
+    $download = isset($options['download']);
 
-if ($download || !file_exists($dataFile)) {
-    echo "Téléchargement des données historiques pour {$symbol}...\n";
+    if ($download || !file_exists($dataFile)) {
+        echo "Téléchargement des données historiques pour {$pairSymbol}...\n";
 
-    // Télécharger les données historiques
-    $startDate = $config['backtest']['start_date'];
-    $endDate = $config['backtest']['end_date'];
+        // Télécharger les données historiques
+        $startDate = $config['backtest']['start_date'];
+        $endDate = $config['backtest']['end_date'];
 
-    echo "Période: de {$startDate} à {$endDate}\n";
+        echo "Période: de {$startDate} à {$endDate}\n";
 
-    $downloadedHistoricalData = $dataLoader->downloadHistoricalData($symbol, '1h', $startDate, $endDate);
+        $downloadedHistoricalData = $dataLoader->downloadHistoricalData($pairSymbol, '1h', $startDate, $endDate);
 
-    if ($downloadedHistoricalData === []) {
-        die("Erreur: Aucune donnée historique n'a pu être téléchargée. Vérifiez les dates et le symbole.\n");
+        if ($downloadedHistoricalData === []) {
+            die("Erreur: Aucune donnée historique n'a pu être téléchargée. Vérifiez les dates et le symbole.\n");
+        }
+
+        // Sauvegarder les données dans un fichier CSV
+        $dataLoader->saveToCSV($downloadedHistoricalData, $dataFile);
+
+        echo "Données historiques sauvegardées dans {$dataFile}\n";
+    } else {
+        echo "Chargement des données historiques depuis {$dataFile}...\n";
     }
 
-    // Sauvegarder les données dans un fichier CSV
-    $dataLoader->saveToCSV($downloadedHistoricalData, $dataFile);
-
-    echo "Données historiques sauvegardées dans {$dataFile}\n";
-} else {
-    echo "Chargement des données historiques depuis {$dataFile}...\n";
-}
-
 // Charger les données historiques
-$dtoHistoricalData = KlineHistory::create($dataLoader->loadFromCSV($dataFile));
+    $dtoHistoricalData = KlineHistory::create($pairSymbol, $dataLoader->loadFromCSV($dataFile));
+    echo "Données chargées : " . $dtoHistoricalData->count() . " points, du " .
+        $dtoHistoricalData->from() . " au " .
+        $dtoHistoricalData->to() . "\n";
 
-echo "Données chargées : " . $dtoHistoricalData->count() . " points, du " .
-    $dtoHistoricalData->from() . " au " .
-    $dtoHistoricalData->to() . "\n";
-
-// Déterminer la stratégie à tester
-
-$clock = new FixedClock();
+    $symbolHistoricalData[$pairSymbol] = $dtoHistoricalData;
+}
 
 // Configurer les paramètres de la stratégie s'ils sont fournis
 $options['params'] ??= '';
@@ -118,9 +117,10 @@ foreach ($listParams as $param) {
     }
 }
 
+// Déterminer la stratégie à tester
 $strategyName = $options['strategy'] ?? 'MovingAverageStrategy';
 try {
-    $strategy = (new StrategyFactory())->create($strategyName, $params);
+    $strategy = (new StrategyFactory())->create($strategyName, $params, true);
 
     echo "Utilisation de la stratégie {$strategyName}\n";
 } catch (Exception $e) {
@@ -138,10 +138,9 @@ $tradingConfiguration = new TradingConfiguration($config);
 // Créer le moteur de backtest
 $backtester = new BacktestEngine(
     $strategy,
-    $dtoHistoricalData,
+    $symbolHistoricalData,
     $tradingConfiguration,
     new BacktestConfiguration($config),
-    $symbol,
 );
 
 // Exécuter le backtest

@@ -5,263 +5,82 @@ namespace Kwizer15\TradingBot\Backtest;
 use Kwizer15\TradingBot\Clock\FixedClock;
 use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
+use Kwizer15\TradingBot\DTO\Balance;
 use Kwizer15\TradingBot\DTO\KlineHistory;
-use Kwizer15\TradingBot\Strategy\PositionAction;
-use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
 use Kwizer15\TradingBot\TradingBot;
-use Psr\Log\NullLogger;
+use Kwizer15\TradingBot\Utils\ConsoleLogger;
 
 class BacktestEngine
 {
-    private float $balance;
+    private Balance $balance;
     private array $positions = [];
-    private array $trades = [];
     private array $equity = [];
-    private float $fees = 0.1; // 0.1% de frais par transaction
+    private KlineHistory $history;
+
     public function __construct(
         private readonly StrategyInterface $strategy,
-        private readonly KlineHistory $history,
+        array $history,
         private readonly TradingConfiguration $tradingConfiguration,
-        BacktestConfiguration $backtestConfiguration,
-        private readonly string $symbol = 'BTCUSDT',
+        private readonly BacktestConfiguration $backtestConfiguration,
     ) {
-        $this->balance = $backtestConfiguration->initialBalance;
-    }
-
-    /**
-     * Simule un achat pendant le backtest
-     */
-    private function buy(string $symbol, float $price, int $timestamp): void
-    {
-        $investment = $this->tradingConfiguration->investmentPerTrade;
-
-        // Vérifier si nous avons assez de fonds
-        if ($this->balance < $investment) {
-            return;
-        }
-
-        // Calculer les frais
-        $fee = ($investment * $this->fees) / 100;
-
-        // Calculer la quantité achetée (après frais)
-        $quantity = ($investment - $fee) / $price;
-
-        // Mettre à jour le solde
-        $this->balance -= $investment;
-
-        // Enregistrer la position
-        $this->positions[$symbol] = [
-            'symbol' => $symbol,
-            'entry_price' => $price,
-            'quantity' => $quantity,
-            'timestamp' => $timestamp,
-            'cost' => $investment,
-            'current_value' => $quantity * $price,
-            'profit_loss' => -$fee,
-            'profit_loss_pct' => -($fee / $investment) * 100
-        ];
-    }
-
-    /**
-     * Simule une vente pendant le backtest
-     */
-    private function sell(string $symbol, float $price, int $timestamp): void
-    {
-        // Vérifier si nous avons cette position
-        if (!isset($this->positions[$symbol])) {
-            return;
-        }
-
-        $position = $this->positions[$symbol];
-
-        // Calculer la valeur de la vente
-        $saleValue = $position['quantity'] * $price;
-
-        // Calculer les frais
-        $fee = ($saleValue * $this->fees) / 100;
-
-        // Calculer le profit/perte
-        $profit = $saleValue - $position['cost'] - $fee;
-        $profitPct = ($profit / $position['cost']) * 100;
-
-        // Mettre à jour le solde
-        $this->balance += $saleValue - $fee;
-
-        // Enregistrer le trade
-        $this->trades[] = [
-            'symbol' => $symbol,
-            'entry_price' => $position['entry_price'],
-            'exit_price' => $price,
-            'entry_time' => $position['timestamp'],
-            'exit_time' => $timestamp,
-            'quantity' => $position['quantity'],
-            'cost' => $position['cost'],
-            'sale_value' => $saleValue,
-            'fees' => $fee + (($position['cost'] * $this->fees) / 100),
-            'profit' => $profit,
-            'profit_pct' => $profitPct,
-            'duration' => ($timestamp - $position['timestamp']) / (60 * 60 * 1000) // Durée en heures
-        ];
-
-        // Supprimer la position
-        unset($this->positions[$symbol]);
+        $this->history = current($history);
+        $this->balance = new Balance($this->backtestConfiguration->initialBalance);
     }
 
     public function run(): array
     {
-        $initialBalance = $this->balance;
+        $initialBalance = $this->balance->free;
         $startTime = microtime(true);
 
         $this->equity[] = [
             'timestamp' => $this->history->first()->openTime, // Timestamp de la première bougie
-            'equity' => $this->balance
+            'equity' => $this->balance->free
         ];
 
         // Parcourir les données historiques
         $countData = $this->history->count();
+        $tradeList = [];
         for ($i = max($this->strategy->getParameter('long_period', 0), $this->strategy->getParameter('period', 0)) + 1; $i < $countData; $i++) {
             $currentData = $this->history->slice($i + 1);
-            $kline = $this->history->get($i);
-            $currentPrice = $kline->close;
-            $timestamp = $kline->closeTime;
-
-            $clock = new FixedClock(\DateTimeImmutable::createFromFormat('U', $timestamp, new \DateTimeZone('UTC')));
-            $binanceAPI = new BacktestBinanceAPI($currentData);
-
-            $tradingBot = new TradingBot(
-                $binanceAPI,
-                $this->strategy,
-                $this->tradingConfiguration,
-                new NullLogger(),
-                __DIR__ . '/data/backtest_positions.json',
-                $clock,
-            );
+            $kline = $currentData->last();
+            $tradingBot = $this->buildTradingBot($currentData);
 
             $tradingBot->run();
 
-            // Vérifier les signaux de vente pour les positions ouvertes
-            foreach ($this->positions as $symbol => $position) {
-                // Vérifier si la stratégie supporte getPositionAction
-                if ($this->strategy instanceof PositionActionStrategyInterface) {
-                    $action = $this->strategy->getPositionAction($currentData, $position);
-
-                    switch ($action) {
-                        case PositionAction::SELL:
-                            $this->sell($symbol, $currentPrice, $timestamp);
-                            break;
-
-                        case PositionAction::INCREASE_POSITION:
-                            // Simuler une augmentation de position
-                            $additionalInvestment = min(
-                                $this->tradingConfiguration->investmentPerTrade * ($this->strategy->calculateIncreasePercentage($currentData, $position) / 100),
-                                $this->balance
-                            );
-
-                            if ($additionalInvestment > 0) {
-                                // Calculer les frais
-                                $fee = ($additionalInvestment * $this->fees) / 100;
-
-                                // Calculer la quantité additionnelle
-                                $additionalQuantity = ($additionalInvestment - $fee) / $currentPrice;
-
-                                // Mettre à jour le solde
-                                $this->balance += -$additionalInvestment;
-
-                                // Mettre à jour la position
-                                $newQuantity = $position['quantity'] + $additionalQuantity;
-                                $newCost = $position['cost'] + $additionalInvestment;
-
-                                $newEntryPrice = $newCost / $newQuantity;
-                                $this->positions[$symbol]['entry_price'] = $newEntryPrice;
-                                $this->updatePosition($symbol, $newQuantity, $newCost, $currentPrice);
-                            }
-                            break;
-
-                        case PositionAction::PARTIAL_EXIT:
-                            $exitPercentage = $this->strategy->calculateExitPercentage($currentData, $position);
-
-                            // Calculer la quantité à vendre
-                            $quantityToSell = $position['quantity'] * ($exitPercentage / 100);
-
-                            // Calculer la valeur de la vente partielle
-                            $partialSaleValue = $quantityToSell * $currentPrice;
-
-                            // Calculer les frais
-                            $fee = ($partialSaleValue * $this->fees) / 100;
-
-                            // Mettre à jour le solde
-                            $this->balance += $partialSaleValue - $fee;
-
-                            // Mettre à jour la position
-                            $remainingQuantity = $position['quantity'] - $quantityToSell;
-
-                            if ($remainingQuantity > 0) {
-                                $remainingCost = $position['cost'] * ($remainingQuantity / $position['quantity']);
-
-                                $this->updatePosition($symbol, $remainingQuantity, $remainingCost, $currentPrice);
-                            } else {
-                                // Si toute la position est vendue, c'est équivalent à un SELL
-                                $this->sell($symbol, $currentPrice, $timestamp);
-                            }
-                            break;
-
-                        case PositionAction::HOLD:
-                        default:
-                            // Ne rien faire
-                            break;
-                    }
-                } else {
-                    // Stratégie classique avec shouldSell
-                    if ($this->strategy->shouldSell($currentData, $position)) {
-                        $this->sell($symbol, $currentPrice, $timestamp);
-                    }
-                }
-            }
-
-            // Vérifier le signal d'achat si nous avons des fonds disponibles
-            if ($this->balance > $this->tradingConfiguration->investmentPerTrade &&
-                count($this->positions) < ($this->tradingConfiguration->maxOpenPositions)) {
-                if ($this->strategy->shouldBuy($currentData, $this->symbol)) {
-                    $this->buy($this->symbol, $currentPrice, $timestamp);
-                }
-            }
-
+            $tradeList[] = $tradingBot->getTrades();
             // Enregistrer l'équité à chaque étape
-            $totalEquity = $this->balance;
+            $totalEquity = $this->balance->free;
             foreach ($this->positions as $position) {
                 $totalEquity += $position['current_value'];
             }
 
             $this->equity[] = [
-                'timestamp' => $timestamp,
+                'timestamp' => $kline->closeTime,
                 'equity' => $totalEquity
             ];
         }
 
-        // Clôturer toutes les positions à la fin du backtest
-        $lastData = $this->history->last();
-        $lastPrice = $lastData->close;
-        $lastTimestamp = $lastData->openTime;
-
+        $trades = array_merge(...$tradeList);
+        $tradingBot = $this->buildTradingBot($this->history);
         foreach ($this->positions as $symbol => $position) {
-            $this->sell($symbol, $lastPrice, $lastTimestamp);
+            $tradingBot->closePosition($symbol);
         }
 
         $endTime = microtime(true);
         $duration = $endTime - $startTime;
 
         // Calculer les statistiques de performance
-        $finalBalance = $this->balance;
+        $finalBalance = $this->balance->free;
         $totalProfit = $finalBalance - $initialBalance;
         $totalProfitPct = ($totalProfit / $initialBalance) * 100;
-        $totalTrades = count($this->trades);
+        $totalTrades = \count($trades);
 
-        $winningTrades = array_filter($this->trades, function($trade) {
+        $winningTrades = array_filter($trades, function($trade) {
             return $trade['profit'] > 0;
         });
 
-        $losingTrades = array_filter($this->trades, function($trade) {
+        $losingTrades = array_filter($trades, function($trade) {
             return $trade['profit'] <= 0;
         });
 
@@ -286,7 +105,6 @@ class BacktestEngine
         // Calculer le drawdown maximum
         $maxEquity = $initialBalance;
         $maxDrawdown = 0;
-        $drawdownStart = null;
         $drawdownEnd = null;
 
         foreach ($this->equity as $equityPoint) {
@@ -306,9 +124,11 @@ class BacktestEngine
 
         // Calculer les frais payés
         $feesPaid = 0;
-        foreach ($this->trades as $trade) {
-            $feesPaid += isset($trade['fees']) ? $trade['fees'] : 0;
+        foreach ($trades as $trade) {
+            $feesPaid += $trade['fees'] ?? 0;
         }
+
+        unlink($this->getPositionFile());
 
         // Résultats du backtest
         return [
@@ -324,19 +144,40 @@ class BacktestEngine
             'win_rate' => $winRate,
             'profit_factor' => $profitFactor,
             'max_drawdown' => $maxDrawdown,
+            'drawdown_end' => $drawdownEnd,
             'fees_paid' => $feesPaid,
             'duration' => $duration,
-            'trades' => $this->trades,
-            'equity_curve' => $this->equity
+            'trades' => $trades,
+            'equity_curve' => $this->equity,
         ];
     }
 
-    private function updatePosition(string $symbol, float $quantity, float $cost, float $currentPrice): void
+    /**
+     * @param KlineHistory $currentData
+     * @return TradingBot
+     */
+    private function buildTradingBot(KlineHistory $currentData): TradingBot
     {
-        $this->positions[$symbol]['quantity'] = $quantity;
-        $this->positions[$symbol]['cost'] = $cost;
-        $this->positions[$symbol]['current_value'] = $quantity * $currentPrice;
-        $this->positions[$symbol]['profit_loss'] = ($quantity * $currentPrice) - $cost;
-        $this->positions[$symbol]['profit_loss_pct'] = (($quantity * $currentPrice) - $cost) / $cost * 100;
+        $kline = $currentData->last();
+        $clock = new FixedClock(\DateTimeImmutable::createFromFormat('U', (int) ($kline->closeTime / 1000), new \DateTimeZone('UTC')));
+        $binanceAPI = new BacktestBinanceAPI($currentData, $this->balance, $this->backtestConfiguration->fees ?? 0.1);
+
+        return new TradingBot(
+            $binanceAPI,
+            $this->strategy,
+            $this->tradingConfiguration,
+            new ConsoleLogger($clock, 'notice'),
+            $this->getPositionFile(),
+            $clock,
+        );
     }
+
+    /**
+     * @return string
+     */
+    private function getPositionFile(): string
+    {
+        return dirname(__DIR__, 2) . '/data/backtest_positions.json';
+    }
+
 }

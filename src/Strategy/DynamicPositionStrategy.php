@@ -3,6 +3,7 @@
 namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
+use Kwizer15\TradingBot\DTO\Order;
 
 class DynamicPositionStrategy implements PositionActionStrategyInterface {
     // Paramètres par défaut de la stratégie
@@ -13,20 +14,19 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
         'position_increase_pct' => 5.0,      // Pourcentage d'augmentation de position si baisse
         'max_investment_multiplier' => 2.0,  // Multiplicateur max de l'investissement initial
         'partial_exit_pct' => 30.0,          // Pourcentage de la position à sortir lors d'un profit
-        'entry_indicators' => [              // Indicateurs pour l'entrée (option)
-            'rsi_period' => 14,
-            'rsi_oversold' => 30,
-            'macd_fast' => 12,
-            'macd_slow' => 26,
-            'macd_signal' => 9
-        ]
+//        'entry_indicators' => [              // Indicateurs pour l'entrée (option)
+//            'rsi_period' => 14,
+//            'rsi_oversold' => 40, // 30
+//            'macd_fast' => 12,
+//            'macd_slow' => 26,
+//            'macd_signal' => 9
+//        ]
     ];
 
     // Stockage des positions avec leurs données
     private array $positionData = [];
 
-    public function __construct() {
-        // Initialiser les données de position
+    public function __construct(private readonly bool $isBacktest = false) {
         $this->loadPositionData();
     }
 
@@ -180,6 +180,7 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
             'initial_investment' => $initialInvestment,
             'total_investment' => $initialInvestment,
             'initial_quantity' => $position['quantity'],
+            'quantity' => $position['quantity'],
             'total_quantity' => $position['quantity'],
             'entry_time' => $position['timestamp'],
             'last_analysis_time' => $position['timestamp'],
@@ -212,7 +213,11 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
      * Sauvegarde les données de position dans un fichier
      */
     private function savePositionData(): void {
-        $dataFile = __DIR__ . '/../../data/strategy_position_data.json';
+        if ($this->isBacktest) {
+            return;
+        }
+
+        $dataFile = $this->getPositionDataFile();
         file_put_contents($dataFile, json_encode($this->positionData, JSON_PRETTY_PRINT));
     }
 
@@ -220,7 +225,10 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
      * Charge les données de position depuis un fichier
      */
     private function loadPositionData(): void {
-        $dataFile = __DIR__ . '/../../data/strategy_position_data.json';
+        if ($this->isBacktest) {
+            return;
+        }
+        $dataFile = $this->getPositionDataFile();
 
         if (file_exists($dataFile)) {
             $this->positionData = json_decode(file_get_contents($dataFile), true);
@@ -258,6 +266,7 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
 
         // Vérifier la condition de surachat
         if ($rsiValue <= $this->params['entry_indicators']['rsi_oversold']) {
+            return true;
             // Calculer le MACD
             $fastPeriod = $this->params['entry_indicators']['macd_fast'];
             $slowPeriod = $this->params['entry_indicators']['macd_slow'];
@@ -463,12 +472,12 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
         $this->savePositionData();
     }
 
-    public function onIncreasePosition(array $position, float $additionalInvestment, float $additionalQuantity): void
+    public function onIncreasePosition(array $position, Order $order): void
     {
         $symbol = $position['symbol'];
 
-        $this->positionData[$symbol]['total_investment'] += $additionalInvestment;
-        $this->positionData[$symbol]['quantity'] += $additionalQuantity;
+        $this->positionData[$symbol]['total_investment'] += $order->quantity * $order->price;
+        $this->positionData[$symbol]['quantity'] += $order->quantity;
         $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity']);
 
         $this->updateStopLoss($symbol, $position, $entryPrice);
@@ -484,5 +493,13 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
                 $this->positionData[$symbol]['exit_reason'] = 'stop_loss';
                 break;
         }
+    }
+
+    /**
+     * @return string
+     */
+    public function getPositionDataFile(): string
+    {
+        return dirname(__DIR__, 2) . '/data/strategy_position_data.json';
     }
 }

@@ -7,12 +7,14 @@ final readonly class BacktestConfiguration
     public float $initialBalance;
     public string $startDate;
     public string $endDate;
+    public float $fees;
     public TradingConfiguration $tradingConfiguration;
 
     public function __construct(private array $config) {
         $this->initialBalance = $config['backtest']['initial_balance'] ?? 1000.0;
         $this->startDate = $config['backtest']['start_date'] ?? '2023-01-01';
         $this->endDate = $config['backtest']['end_date'] ?? '2023-12-31';
+        $this->fees = $config['backtest']['fees'] ?? 0.1;
         $this->tradingConfiguration = new TradingConfiguration($config);
     }
 

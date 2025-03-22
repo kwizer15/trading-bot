@@ -55,39 +55,39 @@ class PositionList
 
     public function increasePosition(
         string $symbol,
-        float  $currentPrice,
-        float  $additionalQuantity,
-        float  $additionalInvestment,
+        Order $order,
     ): array
     {
         $this->load();
 
+        $currentPrice = $order->price;
         $position = $this->positions[$symbol];
-        $quantity = $position['quantity'] + $additionalQuantity;
-        $cost = $position['cost'] + $additionalInvestment;
-        $entryPrice = $cost / $quantity;
+        $totalQuantity = $position['quantity'] + $order->quantity;
+        $cost = $position['cost'] + ($order->quantity * $order->price);
+        $entryPrice = $cost / $totalQuantity;
 
+        $currentValue = $totalQuantity * $currentPrice;
+        $profitLoss = $currentValue - $cost;
         $this->positions[$symbol] = [
-            'symbol' => $symbol,
             'entry_price' => $entryPrice,
-            'quantity' => $quantity,
-            'timestamp' => $position['timestamp'],
+            'quantity' => $totalQuantity,
             'cost' => $cost,
             'current_price' => $currentPrice,
-            'current_value' => $quantity * $currentPrice,
-            'profit_loss' => ($quantity * $currentPrice) - $cost,
-            'profit_loss_pct' => ((($quantity * $currentPrice) - $cost) / $cost) * 100,
-            'order_id' => $position['order_id']
-        ];
+            'current_value' => $currentValue,
+            'profit_loss' => $profitLoss,
+            'profit_loss_pct' => ($profitLoss / $cost) * 100,
+            'order_id' => $position['order_id'].'/'.$order->orderId,
+            'total_buy_fees' => $position['total_buy_fees'] + $order->fee,
+        ] + $this->positions[$symbol];
 
         $this->save();
 
-        $this->logger->info("Position augmentée pour {$symbol}: +{$additionalQuantity} au prix de {$currentPrice}");
+        $this->logger->info("Position augmentée pour {$symbol}: +{$order->quantity} au prix de {$currentPrice}");
 
         return $this->positions[$symbol];
     }
 
-    public function partialExit(string $symbol, float $quantityToSell): array
+    public function partialExit(string $symbol, float $quantityToSell, float $fees): array
     {
         $this->load();
 
@@ -96,41 +96,39 @@ class PositionList
         $remainingQuantity = $position['quantity'] - $quantityToSell;
         $remainingCost = $position['cost'] * ($remainingQuantity / $position['quantity']);
 
+        $currentPrice = $position['current_price'];
+        $currentValue = $remainingQuantity * $currentPrice;
+        $profitLoss = $currentValue - $remainingCost;
         $this->positions[$symbol] = [
-            'symbol' => $symbol,
-            'entry_price' => $position['entry_price'],
             'quantity' => $remainingQuantity,
-            'timestamp' => $position['timestamp'],
             'cost' => $remainingCost,
-            'current_price' => $position['current_price'],
-            'current_value' => $remainingQuantity * $position['current_price'],
-            'profit_loss' => ($remainingQuantity * $position['current_price']) - $remainingCost,
-            'profit_loss_pct' => ((($remainingQuantity * $position['current_price']) - $remainingCost) / $remainingCost) * 100,
-            'order_id' => $position['order_id']
-        ];
+            'current_value' => $currentValue,
+            'profit_loss' => $profitLoss,
+            'profit_loss_pct' => (($profitLoss) / $remainingCost) * 100,
+        ] + $this->positions[$symbol];
 
         $this->save();
 
-        $this->logger->info( "Sortie partielle réussie pour {$symbol}: {$quantityToSell} vendus au prix de {$position['current_price']}");
+        $this->logger->info( "Sortie partielle réussie pour {$symbol}: {$quantityToSell} vendus au prix de {$currentPrice}");
 
         return $this->positions[$symbol];
     }
 
-    public function buy(string $symbol, float $currentPrice, float $quantity, float $cost, int $orderId, int $timestamp = null): array
+    public function buy(string $symbol, float $currentPrice, float $quantity, float $cost, int $orderId, float $fees): array
     {
         $this->load();
 
-        $timestamp ??= $this->clock->now()->getTimestamp() * 1000;
         $this->positions[$symbol] = [
             'symbol' => $symbol,
             'entry_price' => $currentPrice,
             'quantity' => $quantity,
-            'timestamp' => $timestamp,
+            'timestamp' => $this->clock->now()->getTimestamp() * 1000,
             'cost' => $cost,
             'current_price' => $currentPrice,
             'current_value' => $quantity * $currentPrice,
             'profit_loss' => 0,
             'profit_loss_pct' => 0,
+            'total_buy_fees' => $fees,
             'order_id' => $orderId
         ];
 

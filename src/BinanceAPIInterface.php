@@ -3,6 +3,7 @@
 namespace Kwizer15\TradingBot;
 
 use Kwizer15\TradingBot\DTO\Balance;
+use Kwizer15\TradingBot\DTO\Order;
 
 interface BinanceAPIInterface
 {
@@ -19,15 +20,15 @@ interface BinanceAPIInterface
     /**
      * Crée un ordre d'achat market
      */
-    public function buyMarket($symbol, $quantity);
+    public function buyMarket($symbol, $quantity): Order;
 
     /**
      * Crée un ordre de vente market
      */
-    public function sellMarket($symbol, $quantity);
+    public function sellMarket($symbol, $quantity): Order;
 
     /**
      * Récupère le prix actuel d'un symbole
      */
-    public function getCurrentPrice($symbol);
+    public function getCurrentPrice($symbol): float;
 }

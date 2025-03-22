@@ -2,8 +2,12 @@
 
 namespace Kwizer15\TradingBot;
 
+use Kwizer15\TradingBot\Clock\RealClock;
 use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 use Kwizer15\TradingBot\DTO\Balance;
+use Kwizer15\TradingBot\DTO\Order;
+use Kwizer15\TradingBot\Utils\Logger;
+use Psr\Log\LoggerInterface;
 
 class BinanceAPI implements BinanceAPIInterface
 {
@@ -12,11 +16,13 @@ class BinanceAPI implements BinanceAPIInterface
 
     private string $baseUrl;
     private array $exchangeInfo;
+    private LoggerInterface $logger;
 
     public function __construct(
-        private readonly ApiConfiguration $apiConfig
+        private readonly ApiConfiguration $apiConfig,
     ) {
         $this->baseUrl = $this->apiConfig->testMode ? self::BASE_URL_TEST : self::BASE_URL;
+        $this->logger = new Logger(new RealClock(), dirname(__DIR__).'/logs/binance_api.log', 'debug');
     }
 
     /**
@@ -94,21 +100,36 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Crée un ordre d'achat market
      */
-    public function buyMarket($symbol, $quantity) {
-        return $this->createOrder($symbol, 'BUY', 'MARKET', $quantity);
+    public function buyMarket($symbol, $quantity): Order {
+        $order = $this->createOrder($symbol, 'BUY', 'MARKET', $quantity);
+        if (!$order || !isset($order['orderId'])) {
+            throw new \Exception("Erreur lors de l’achat de {$symbol}: " . json_encode($order));
+        }
+
+        $this->logger->debug('Nouvel ordre d’achat : ' . json_encode($order));
+
+        return new Order($order['orderId'], $order['price'], $order['executedQty'], 0, $order['transactTime']);
     }
 
     /**
      * Crée un ordre de vente market
      */
-    public function sellMarket($symbol, $quantity) {
-        return $this->createOrder($symbol, 'SELL', 'MARKET', $quantity);
+    public function sellMarket($symbol, $quantity): Order
+    {
+        $order = $this->createOrder($symbol, 'SELL', 'MARKET', $quantity);
+        if (!$order || !isset($order['orderId'])) {
+            throw new \Exception("Erreur lors de la vente de {$symbol}: " . json_encode($order));
+        }
+
+        $this->logger->debug('Nouvel ordre de vente : ' . json_encode($order));
+
+        return new Order($order['orderId'], $order['price'], $order['executedQty'], 0, $order['transactTime']);
     }
 
     /**
      * Récupère le prix actuel d'un symbole
      */
-    public function getCurrentPrice($symbol) {
+    public function getCurrentPrice($symbol): float {
         $endpoint = 'v3/ticker/price';
         $params = [
             'symbol' => $symbol
@@ -116,11 +137,11 @@ class BinanceAPI implements BinanceAPIInterface
 
         $result = $this->makeRequest($endpoint, $params, 'GET', false);
 
-        if (isset($result['price'])) {
-            return floatval($result['price']);
+        if (!isset($result['price'])) {
+            throw new \Exception("Prix actuel de {$symbol} non disponible");
         }
 
-        return null;
+        return (float) $result['price'];
     }
 
     /**

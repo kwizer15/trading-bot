@@ -102,9 +102,9 @@ class DataLoader {
     /**
      * Charge les données historiques depuis un fichier CSV
      */
-    public function loadFromCSV($filePath) {
+    public function loadFromCSV($filePath): iterable {
         if (!file_exists($filePath)) {
-            throw new Exception("Le fichier {$filePath} n'existe pas");
+            throw new \Exception("Le fichier {$filePath} n'existe pas");
         }
 
         $data = [];
@@ -116,12 +116,10 @@ class DataLoader {
 
         // Lire les données
         while (($row = fgetcsv($file)) !== false) {
-            $data[] = $row;
+            yield $row;
         }
 
         fclose($file);
-
-        return $data;
     }
 
     /**

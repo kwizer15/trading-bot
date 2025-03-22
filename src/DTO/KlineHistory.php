@@ -8,23 +8,34 @@ final readonly class KlineHistory
      * @param non-empty-array<Kline> $data
      */
     private function __construct(
+        private string $pairSymbol,
         private array $originalData,
         private array $data
     ) {
     }
 
-    public static function create(array $historycalData): self
+    public static function create(string $pair, iterable $historycalData): self
     {
-        if ([] === $historycalData) {
+        $originalData = [];
+        $data = [];
+        foreach ($historycalData as $kline) {
+            $originalData[] = $kline;
+            $data[] = new Kline(
+                (int) $kline[0],
+                (float) $kline[1],
+                (float) $kline[2],
+                (float) $kline[3],
+                (float) $kline[4],
+                (float) $kline[5],
+                (int) $kline[6],
+            );
+        }
+
+        if ([] === $data) {
             throw new \Exception('Data is empty');
         }
 
-        $data = [];
-        foreach ($historycalData as $kline) {
-            $data[] = new Kline(...$kline);
-        }
-
-        return new self($historycalData, $data);
+        return new self($pair, $originalData, $data);
     }
 
     public function count(): int
@@ -51,7 +62,8 @@ final readonly class KlineHistory
     {
         $slice = array_slice($this->originalData, 0, $length);
         $slice2 = array_slice($this->data, 0, $length);
-        return new self($slice, $slice2);
+
+        return new self($this->pairSymbol, $slice, $slice2);
     }
 
     public function getData(): array
