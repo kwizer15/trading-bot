@@ -23,14 +23,14 @@ class PositionList
             return;
         }
 
-            if (file_exists($this->positionsFile)) {
-                $this->positions = json_decode(file_get_contents($this->positionsFile), true);
-                $this->logger->info( 'Positions chargées: ' . count($this->positions));
-            } else {
-                $this->logger->info( 'Aucune position existante trouvée');
-            }
+        if (file_exists($this->positionsFile)) {
+            $this->positions = json_decode(file_get_contents($this->positionsFile), true);
+            $this->logger->info('Positions chargées: ' . count($this->positions));
+        } else {
+            $this->logger->info('Aucune position existante trouvée');
+        }
 
-            $this->loaded = true;
+        $this->loaded = true;
 
     }
 
@@ -56,8 +56,7 @@ class PositionList
     public function increasePosition(
         string $symbol,
         Order $order,
-    ): array
-    {
+    ): array {
         $this->load();
 
         $currentPrice = $order->price;
@@ -110,7 +109,7 @@ class PositionList
 
         $this->save();
 
-        $this->logger->info( "Sortie partielle réussie pour {$symbol}: {$quantityToSell} vendus au prix de {$currentPrice}");
+        $this->logger->info("Sortie partielle réussie pour {$symbol}: {$quantityToSell} vendus au prix de {$currentPrice}");
 
         return $this->positions[$symbol];
     }
@@ -147,7 +146,7 @@ class PositionList
 
         $position = $this->getPositionForSymbol($symbol);
 
-        $this->logger->info( "Vente réussie de {$position['quantity']} {$symbol} au prix de {$position['current_price']} (P/L: {$position['profit_loss_pct']}%)");
+        $this->logger->info("Vente réussie de {$position['quantity']} {$symbol} au prix de {$position['current_price']} (P/L: {$position['profit_loss_pct']}%)");
 
         unset($this->positions[$symbol]);
 

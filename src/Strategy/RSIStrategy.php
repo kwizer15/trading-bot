@@ -4,7 +4,8 @@ namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 
-final class RSIStrategy implements StrategyInterface {
+final class RSIStrategy implements StrategyInterface
+{
     private $params = [
         'period' => 14,           // Période pour le calcul du RSI
         'overbought' => 70,       // Niveau de surachat
@@ -15,7 +16,8 @@ final class RSIStrategy implements StrategyInterface {
     /**
      * Calcule l'indice de force relative (RSI)
      */
-    private function calculateRSI(KlineHistory $history, int $period, int $priceIndex): float {
+    private function calculateRSI(KlineHistory $history, int $period, int $priceIndex): float
+    {
         $count = $history->count();
 
         $priceIndexMap = [
@@ -63,7 +65,8 @@ final class RSIStrategy implements StrategyInterface {
         return $rsi;
     }
 
-    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool {
+    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool
+    {
         try {
             // Calculer le RSI actuel
             $currentRSI = $this->calculateRSI($history, $this->params['period'], $this->params['price_index']);
@@ -88,7 +91,8 @@ final class RSIStrategy implements StrategyInterface {
         }
     }
 
-    public function shouldSell(KlineHistory $history, array $position): bool {
+    public function shouldSell(KlineHistory $history, array $position): bool
+    {
         try {
             // Calculer le RSI actuel
             $currentRSI = $this->calculateRSI($history, $this->params['period'], $this->params['price_index']);
@@ -113,17 +117,20 @@ final class RSIStrategy implements StrategyInterface {
         }
     }
 
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'RSI Strategy';
     }
 
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Stratégie basée sur l\'indice de force relative (RSI). ' .
             'Achète lorsque le RSI sort d\'une zone de survente et ' .
             'vend lorsque le RSI sort d\'une zone de surachat.';
     }
 
-    public function setParameters(array $params): void {
+    public function setParameters(array $params): void
+    {
         foreach ($params as $key => $value) {
             if (array_key_exists($key, $this->params)) {
                 $this->params[$key] = $value;
@@ -131,11 +138,13 @@ final class RSIStrategy implements StrategyInterface {
         }
     }
 
-    public function getParameters(): array {
+    public function getParameters(): array
+    {
         return $this->params;
     }
 
-    public function getParameter(string $key, mixed $default = null): mixed {
+    public function getParameter(string $key, mixed $default = null): mixed
+    {
         return $this->params[$key] ?? $default;
     }
     public function onSell(string $symbol, float $currentPrice): void

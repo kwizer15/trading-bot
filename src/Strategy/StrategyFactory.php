@@ -4,7 +4,8 @@ namespace Kwizer15\TradingBot\Strategy;
 
 final class StrategyFactory
 {
-    public function create(string $strategyName, array $params, bool $backtest = false): StrategyInterface {
+    public function create(string $strategyName, array $params, bool $backtest = false): StrategyInterface
+    {
 
         $strategy = match ($strategyName) {
             'RSI',

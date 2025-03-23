@@ -12,7 +12,8 @@ use Kwizer15\TradingBot\Strategy\StrategyInterface;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 
-class TradingBot {
+class TradingBot
+{
     private PositionList $positionList;
     private ClockInterface $clock;
 
@@ -37,7 +38,8 @@ class TradingBot {
     /**
      * Lance le bot de trading
      */
-    public function run(): void {
+    public function run(): void
+    {
         $this->logger->info('Démarrage du bot de trading avec la stratégie: ' . $this->strategy->getName());
 
         $this->managePositions();
@@ -53,7 +55,8 @@ class TradingBot {
      * @param string $symbol Symbole de la paire
      * @param float $additionalInvestment Montant supplémentaire à investir
      */
-    public function increasePosition(string $symbol, float $additionalInvestment): void {
+    public function increasePosition(string $symbol, float $additionalInvestment): void
+    {
         try {
             // Vérifier si nous avons cette position
             if (!$this->positionList->hasPositionForSymbol($symbol)) {
@@ -77,7 +80,7 @@ class TradingBot {
             $this->strategy->onIncreasePosition($position, $order);
             $this->logger->notice("Position {$symbol} augmentée de {$additionalQuantity} {$symbol}");
         } catch (\Exception $e) {
-            $this->logger->error( "Erreur lors de l'augmentation de la position {$symbol}: " . $e->getMessage());
+            $this->logger->error("Erreur lors de l'augmentation de la position {$symbol}: " . $e->getMessage());
         }
     }
 
@@ -89,11 +92,12 @@ class TradingBot {
      *
      * @return bool Succès de l'opération
      */
-    public function partialExit(string $symbol, float $exitPercentage): void {
+    public function partialExit(string $symbol, float $exitPercentage): void
+    {
         try {
             // Vérifier si nous avons cette position
             if (!$this->positionList->hasPositionForSymbol($symbol)) {
-                $this->logger->warning( "Impossible de réaliser une sortie partielle, aucune position trouvée pour {$symbol}");
+                $this->logger->warning("Impossible de réaliser une sortie partielle, aucune position trouvée pour {$symbol}");
                 return;
             }
 
@@ -107,7 +111,7 @@ class TradingBot {
 
             // Vérifier que la quantité à vendre est suffisante
             if ($quantityToSell <= 0) {
-                $this->logger->warning( "Quantité de sortie trop faible pour {$symbol}");
+                $this->logger->warning("Quantité de sortie trop faible pour {$symbol}");
                 return;
             }
 
@@ -118,7 +122,7 @@ class TradingBot {
             $this->strategy->onPartialExit($position, $order);
             $this->logger->notice("Sortie partielle de {$symbol} de {$order->quantity} {$symbol}");
         } catch (\Exception $e) {
-            $this->logger->error( "Erreur lors de la sortie partielle de {$symbol}: " . $e->getMessage());
+            $this->logger->error("Erreur lors de la sortie partielle de {$symbol}: " . $e->getMessage());
         }
     }
 
@@ -126,7 +130,8 @@ class TradingBot {
      * Gère les positions ouvertes avec support pour actions spéciales
      * Cette méthode remplace ou complète la méthode managePositions() existante
      */
-    private function managePositions(): void {
+    private function managePositions(): void
+    {
         foreach ($this->positionList->iterateSymbols() as $symbol) {
             $this->managePosition($symbol);
         }
@@ -143,14 +148,14 @@ class TradingBot {
 
             // Vérifier le stop loss général
             if ($this->positionList->isStopLossTriggered($symbol, $this->tradingConfiguration->stopLossPercentage)) {
-                $this->logger->notice( "Stop loss déclenché pour {$symbol} (perte: {$position['profit_loss_pct']}%)");
+                $this->logger->notice("Stop loss déclenché pour {$symbol} (perte: {$position['profit_loss_pct']}%)");
                 $this->sell($symbol);
                 return;
             }
 
             // Vérifier le take profit général
             if ($this->positionList->isTakeProfitTriggered($symbol, $this->tradingConfiguration->takeProfitPercentage)) {
-                $this->logger->notice( "Take profit déclenché pour {$symbol} (gain: {$position['profit_loss_pct']}%)");
+                $this->logger->notice("Take profit déclenché pour {$symbol} (gain: {$position['profit_loss_pct']}%)");
                 $this->sell($symbol);
                 return;
             }
@@ -165,40 +170,40 @@ class TradingBot {
 
                 switch ($action) {
                     case PositionAction::SELL:
-                        $this->logger->notice( "Signal de vente détecté pour {$symbol}");
+                        $this->logger->notice("Signal de vente détecté pour {$symbol}");
                         $this->sell($symbol);
                         break;
 
                     case PositionAction::INCREASE_POSITION:
                         $percentIncrease = $this->strategy->calculateIncreasePercentage($dtoKlines, $position);
                         $additionalInvestment = $this->calculateAdditionalInvestment($percentIncrease);
-                        $this->logger->notice( "Signal d'augmentation de position pour {$symbol}");
+                        $this->logger->notice("Signal d'augmentation de position pour {$symbol}");
                         $this->increasePosition($symbol, $additionalInvestment);
                         break;
 
                     case PositionAction::PARTIAL_EXIT:
                         $exitPercentage = $this->strategy->calculateExitPercentage($dtoKlines, $position);
-                        $this->logger->notice( "Signal de sortie partielle pour {$symbol}");
+                        $this->logger->notice("Signal de sortie partielle pour {$symbol}");
                         $this->partialExit($symbol, $exitPercentage);
                         break;
 
                     case PositionAction::HOLD:
                     default:
-                        $this->logger->info( "Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
+                        $this->logger->info("Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
                         break;
                 }
                 return;
             }
-                // Utiliser l'approche classique shouldSell
+            // Utiliser l'approche classique shouldSell
             if ($this->strategy->shouldSell($dtoKlines, $position)) {
-                $this->logger->info( "Signal de vente détecté pour {$symbol}");
+                $this->logger->info("Signal de vente détecté pour {$symbol}");
                 $this->sell($symbol);
                 return;
             }
 
-            $this->logger->info( "Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
+            $this->logger->info("Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
         } catch (\Exception $e) {
-            $this->logger->error( "Erreur lors de la gestion de la position {$symbol}: " . $e->getMessage());
+            $this->logger->error("Erreur lors de la gestion de la position {$symbol}: " . $e->getMessage());
         }
     }
 
@@ -218,7 +223,8 @@ class TradingBot {
     /**
      * Cherche de nouvelles opportunités d'achat
      */
-    private function findBuyOpportunities(): void {
+    private function findBuyOpportunities(): void
+    {
         // Vérifier si nous avons déjà atteint le nombre maximum de positions
         if ($this->positionList->count() >= $this->tradingConfiguration->maxOpenPositions) {
             $this->logger->info('Nombre maximum de positions atteint, aucun nouvel achat possible');
@@ -240,7 +246,7 @@ class TradingBot {
 
                 // Vérifier le signal d'achat
                 if ($this->strategy->shouldBuy($history, $pairSymbol)) {
-                    $this->logger->notice( "Signal d'achat détecté pour {$pairSymbol}");
+                    $this->logger->notice("Signal d'achat détecté pour {$pairSymbol}");
                     $this->buy($pairSymbol, $this->strategy->getInvestment($pairSymbol, $history->last()->close));
 
                     // Si nous avons atteint le nombre maximum de positions après cet achat, on arrête
@@ -249,7 +255,7 @@ class TradingBot {
                     }
                 }
             } catch (\Exception $e) {
-                $this->logger->error( "Erreur lors de la recherche d'opportunités pour {$pairSymbol}: " . $e->getMessage());
+                $this->logger->error("Erreur lors de la recherche d'opportunités pour {$pairSymbol}: " . $e->getMessage());
             }
         }
     }
@@ -257,7 +263,8 @@ class TradingBot {
     /**
      * Exécute un achat
      */
-    private function buy(string $symbol, float $investment = null): void {
+    private function buy(string $symbol, float $investment = null): void
+    {
         try {
             // Vérifier le solde disponible
             $balance = $this->binanceAPI->getBalance($this->tradingConfiguration->baseCurrency);
@@ -286,18 +293,20 @@ class TradingBot {
         }
     }
 
-    public function closePosition(string $symbol): void {
+    public function closePosition(string $symbol): void
+    {
         $this->sell($symbol);
     }
 
     /**
      * Exécute une vente
      */
-    private function sell($symbol): void {
+    private function sell($symbol): void
+    {
         try {
             // Vérifier si nous avons cette position
             if (!$this->positionList->hasPositionForSymbol($symbol)) {
-                $this->logger->warning( "Aucune position trouvée pour {$symbol}");
+                $this->logger->warning("Aucune position trouvée pour {$symbol}");
                 return;
             }
 
@@ -333,12 +342,13 @@ class TradingBot {
             return;
 
         } catch (\Exception $e) {
-            $this->logger->error( "Erreur lors de la vente de {$symbol}: " . $e->getMessage());
+            $this->logger->error("Erreur lors de la vente de {$symbol}: " . $e->getMessage());
             return;
         }
     }
 
-    public function getTrades(): array {
+    public function getTrades(): array
+    {
         return $this->trades;
     }
 }

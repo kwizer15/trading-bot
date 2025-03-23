@@ -8,7 +8,6 @@ use Psr\Log\LoggerTrait;
 
 final class ConsoleLogger implements LoggerInterface
 {
-
     use LoggerTrait;
 
     private int $logLevel;

@@ -61,7 +61,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Récupère le solde pour une devise spécifique
      */
-    public function getBalance(string $currency): Balance {
+    public function getBalance(string $currency): Balance
+    {
         $account = $this->getAccount();
 
         if (isset($account['balances'])) {
@@ -78,7 +79,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Crée un ordre d'achat ou de vente
      */
-    private function createOrder(string $symbol, string $side, string $type, float $quantity, float $price = null) {
+    private function createOrder(string $symbol, string $side, string $type, float $quantity, float $price = null)
+    {
         $endpoint = 'v3/order';
 
         $params = [
@@ -100,7 +102,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Crée un ordre d'achat market
      */
-    public function buyMarket($symbol, $quantity): Order {
+    public function buyMarket($symbol, $quantity): Order
+    {
         $order = $this->createOrder($symbol, 'BUY', 'MARKET', $quantity);
         if (!$order || !isset($order['orderId'])) {
             throw new \Exception("Erreur lors de l’achat de {$symbol}: " . json_encode($order));
@@ -129,7 +132,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Récupère le prix actuel d'un symbole
      */
-    public function getCurrentPrice($symbol): float {
+    public function getCurrentPrice($symbol): float
+    {
         $endpoint = 'v3/ticker/price';
         $params = [
             'symbol' => $symbol
@@ -147,7 +151,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Récupère tous les ordres ouverts
      */
-    private function getOpenOrders($symbol = null) {
+    private function getOpenOrders($symbol = null)
+    {
         $endpoint = 'v3/openOrders';
         $params = [];
 
@@ -161,7 +166,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Annule un ordre
      */
-    private function cancelOrder($symbol, $orderId) {
+    private function cancelOrder($symbol, $orderId)
+    {
         $endpoint = 'v3/order';
         $params = [
             'symbol' => $symbol,
@@ -177,27 +183,28 @@ class BinanceAPI implements BinanceAPIInterface
      * @param string $baseCurrency Devise de base (ex: USDT, BTC)
      * @return array Liste des symboles disponibles
      */
-    public function getAvailableSymbols(string $baseCurrency) {
+    public function getAvailableSymbols(string $baseCurrency)
+    {
         $result = $this->getExchangeInfo();
         $symbols = [];
 
-            foreach (($result['symbols'] ?? []) as $symbol) {
-                // Vérifier si le symbole est actif pour le trading
-                if ($symbol['status'] === 'TRADING') {
-                    // Si une devise de base est spécifiée, filtrer les paires qui se terminent par cette devise
-                    if ($baseCurrency === null || substr($symbol['symbol'], -strlen($baseCurrency)) === $baseCurrency) {
-                        $baseAsset = $symbol['baseAsset'];
-                        $quoteAsset = $symbol['quoteAsset'];
+        foreach (($result['symbols'] ?? []) as $symbol) {
+            // Vérifier si le symbole est actif pour le trading
+            if ($symbol['status'] === 'TRADING') {
+                // Si une devise de base est spécifiée, filtrer les paires qui se terminent par cette devise
+                if ($baseCurrency === null || substr($symbol['symbol'], -strlen($baseCurrency)) === $baseCurrency) {
+                    $baseAsset = $symbol['baseAsset'];
+                    $quoteAsset = $symbol['quoteAsset'];
 
-                        // Si on a filtré par devise de base, n'ajouter que l'actif de base
-                        if ($baseCurrency !== null && $quoteAsset === $baseCurrency) {
-                            $symbols[] = $baseAsset;
-                        } else {
-                            // Sinon ajouter la paire complète
-                            $symbols[] = $symbol['symbol'];
-                        }
+                    // Si on a filtré par devise de base, n'ajouter que l'actif de base
+                    if ($baseCurrency !== null && $quoteAsset === $baseCurrency) {
+                        $symbols[] = $baseAsset;
+                    } else {
+                        // Sinon ajouter la paire complète
+                        $symbols[] = $symbol['symbol'];
                     }
                 }
+            }
         }
 
         return $symbols;
@@ -207,7 +214,8 @@ class BinanceAPI implements BinanceAPIInterface
      * Récupère toutes les devises de base disponibles (USDT, BTC, ETH, etc.)
      * @return array Liste des devises de base disponibles
      */
-    public function getBaseCurrencies() {
+    public function getBaseCurrencies()
+    {
         $endpoint = 'v3/exchangeInfo';
         $result = $this->makeRequest($endpoint, [], 'GET', false);
 
@@ -235,7 +243,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Effectue une requête à l'API Binance
      */
-    private function makeRequest($endpoint, array $params = [], $method = 'GET', $auth = false, $baseUrl = null): array {
+    private function makeRequest($endpoint, array $params = [], $method = 'GET', $auth = false, $baseUrl = null): array
+    {
         $baseUrl ??= $this->baseUrl;
         $url = $baseUrl . $endpoint;
 
@@ -292,7 +301,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Génère une signature HMAC SHA256 pour authentifier les requêtes
      */
-    private function generateSignature($params) {
+    private function generateSignature($params)
+    {
         $query = http_build_query($params);
         return hash_hmac('sha256', $query, $this->apiConfig->secret);
     }
@@ -300,7 +310,8 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Obtient le timestamp actuel en millisecondes
      */
-    private function getTimestamp(): int {
+    private function getTimestamp(): int
+    {
         return round(microtime(true) * 1000);
     }
 

@@ -4,7 +4,8 @@ namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 
-final class MovingAverageStrategy implements StrategyInterface {
+final class MovingAverageStrategy implements StrategyInterface
+{
     private $params = [
         'short_period' => 9,   // Période courte (en bougies)
         'long_period' => 21,   // Période longue (en bougies)
@@ -14,7 +15,8 @@ final class MovingAverageStrategy implements StrategyInterface {
     /**
      * Calcule la moyenne mobile simple pour une période donnée
      */
-    private function calculateSMA(KlineHistory $history, int $period, int $priceIndex): float {
+    private function calculateSMA(KlineHistory $history, int $period, int $priceIndex): float
+    {
         $count = $history->count();
 
         $priceIndexMap = [
@@ -43,7 +45,8 @@ final class MovingAverageStrategy implements StrategyInterface {
      * Vérifie si un croisement haussier (Golden Cross) s'est produit
      * (SMA courte croise au-dessus de SMA longue)
      */
-    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool {
+    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool
+    {
         try {
             // Calculer la SMA courte et longue actuelles
             $shortSMA_current = $this->calculateSMA($history, $this->params['short_period'], $this->params['price_index']);
@@ -74,7 +77,8 @@ final class MovingAverageStrategy implements StrategyInterface {
      * Vérifie si un croisement baissier (Death Cross) s'est produit
      * (SMA courte croise en-dessous de SMA longue)
      */
-    public function shouldSell(KlineHistory $history, array $position): bool {
+    public function shouldSell(KlineHistory $history, array $position): bool
+    {
         try {
             // Calculer la SMA courte et longue actuelles
             $shortSMA_current = $this->calculateSMA($history, $this->params['short_period'], $this->params['price_index']);
@@ -101,17 +105,20 @@ final class MovingAverageStrategy implements StrategyInterface {
         }
     }
 
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'Moving Average Crossover';
     }
 
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Stratégie basée sur le croisement de deux moyennes mobiles simples (SMA). ' .
             'Achète lors d\'un Golden Cross (SMA courte croise au-dessus de SMA longue) et ' .
             'vend lors d\'un Death Cross (SMA courte croise en-dessous de SMA longue).';
     }
 
-    public function setParameters(array $params): void {
+    public function setParameters(array $params): void
+    {
         foreach ($params as $key => $value) {
             if (array_key_exists($key, $this->params)) {
                 $this->params[$key] = $value;
@@ -119,11 +126,13 @@ final class MovingAverageStrategy implements StrategyInterface {
         }
     }
 
-    public function getParameters(): array {
+    public function getParameters(): array
+    {
         return $this->params;
     }
 
-    public function getParameter(string $key, mixed $default = null): mixed {
+    public function getParameter(string $key, mixed $default = null): mixed
+    {
         return $this->params[$key] ?? $default;
     }
     public function onSell(string $symbol, float $currentPrice): void

@@ -10,7 +10,8 @@ final readonly class BacktestConfiguration
     public float $fees;
     public TradingConfiguration $tradingConfiguration;
 
-    public function __construct(private array $config) {
+    public function __construct(private array $config)
+    {
         $this->initialBalance = $config['backtest']['initial_balance'] ?? 1000.0;
         $this->startDate = $config['backtest']['start_date'] ?? '2023-01-01';
         $this->endDate = $config['backtest']['end_date'] ?? '2023-12-31';
@@ -44,7 +45,8 @@ final readonly class BacktestConfiguration
         ] + $this->config);
     }
 
-    public function export(): void {
+    public function export(): void
+    {
         file_put_contents($this->exportPath(), '<?php return ' . var_export($this->config, true) . ';');
     }
 

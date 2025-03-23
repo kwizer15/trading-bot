@@ -4,10 +4,12 @@ namespace Kwizer15\TradingBot\Backtest;
 
 use Kwizer15\TradingBot\BinanceAPI;
 
-final class DataLoader {
+final class DataLoader
+{
     private $binanceAPI;
 
-    public function __construct(BinanceAPI $binanceAPI) {
+    public function __construct(BinanceAPI $binanceAPI)
+    {
         $this->binanceAPI = $binanceAPI;
     }
 
@@ -15,7 +17,8 @@ final class DataLoader {
      * Télécharge des données historiques depuis Binance
      * Version améliorée pour gérer de plus grandes périodes
      */
-    public function downloadHistoricalData($symbol, $interval = '1h', $startTime = null, $endTime = null) {
+    public function downloadHistoricalData($symbol, $interval = '1h', $startTime = null, $endTime = null)
+    {
         $klines = [];
         $limit = 1000; // Nombre maximum de klines par requête
 
@@ -32,7 +35,7 @@ final class DataLoader {
         }
 
         // Logging pour debug
-        echo "Téléchargement des données de " . date('Y-m-d', $startTime/1000) . " à " . date('Y-m-d', $endTime/1000) . "\n";
+        echo "Téléchargement des données de " . date('Y-m-d', $startTime / 1000) . " à " . date('Y-m-d', $endTime / 1000) . "\n";
 
         $currentStartTime = $startTime;
 
@@ -46,11 +49,11 @@ final class DataLoader {
                 $response = $this->binanceAPI->getKlines($symbol, $interval, $limit, $currentStartTime, $currentEndTime);
 
                 if (empty($response)) {
-                    echo "Aucune donnée reçue pour la période " . date('Y-m-d', $currentStartTime/1000) . " à " . date('Y-m-d', $currentEndTime/1000) . "\n";
+                    echo "Aucune donnée reçue pour la période " . date('Y-m-d', $currentStartTime / 1000) . " à " . date('Y-m-d', $currentEndTime / 1000) . "\n";
                     break;
                 }
 
-                echo "Reçu " . count($response) . " bougies pour la période " . date('Y-m-d', $currentStartTime/1000) . " à " . date('Y-m-d', $currentEndTime/1000) . "\n";
+                echo "Reçu " . count($response) . " bougies pour la période " . date('Y-m-d', $currentStartTime / 1000) . " à " . date('Y-m-d', $currentEndTime / 1000) . "\n";
 
                 $klines = array_merge($klines, $response);
 
@@ -77,7 +80,8 @@ final class DataLoader {
     /**
      * Enregistre les données historiques dans un fichier CSV
      */
-    public function saveToCSV($data, $filePath) {
+    public function saveToCSV($data, $filePath): void
+    {
         $dir = dirname($filePath);
 
         if (!is_dir($dir)) {
@@ -95,19 +99,18 @@ final class DataLoader {
         }
 
         fclose($file);
-
-        return true;
     }
 
     /**
      * Charge les données historiques depuis un fichier CSV
+     *
+     * @return \Generator<array<int, string>>
      */
-    public function loadFromCSV($filePath): iterable {
+    public function loadFromCSV($filePath): iterable
+    {
         if (!file_exists($filePath)) {
             throw new \Exception("Le fichier {$filePath} n'existe pas");
         }
-
-        $data = [];
 
         $file = fopen($filePath, 'r');
 
@@ -125,7 +128,8 @@ final class DataLoader {
     /**
      * Convertit un intervalle en millisecondes
      */
-    private function getIntervalInMilliseconds($interval) {
+    private function getIntervalInMilliseconds($interval)
+    {
         $unit = substr($interval, -1);
         $value = intval(substr($interval, 0, -1));
 

@@ -14,7 +14,6 @@ use Kwizer15\TradingBot\Utils\ConsoleLogger;
 class BacktestEngine
 {
     private Balance $balance;
-    private array $positions = [];
     private array $equity = [];
     private KlineHistory $history;
 
@@ -77,11 +76,11 @@ class BacktestEngine
         $totalProfitPct = ($totalProfit / $initialBalance) * 100;
         $totalTrades = \count($trades);
 
-        $winningTrades = array_filter($trades, function($trade) {
+        $winningTrades = array_filter($trades, function ($trade) {
             return $trade['profit'] > 0;
         });
 
-        $losingTrades = array_filter($trades, function($trade) {
+        $losingTrades = array_filter($trades, function ($trade) {
             return $trade['profit'] <= 0;
         });
 

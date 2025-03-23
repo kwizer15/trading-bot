@@ -4,7 +4,8 @@ namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 
-interface StrategyInterface {
+interface StrategyInterface
+{
     /**
      * Analyse les données du marché et détermine si un signal d'achat est présent
      *

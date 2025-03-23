@@ -12,8 +12,7 @@ final readonly class Kline
         public float $close,
         public float $volume,
         public int   $closeTime
-    )
-    {
+    ) {
 
     }
 

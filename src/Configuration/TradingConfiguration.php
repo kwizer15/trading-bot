@@ -4,7 +4,6 @@ namespace Kwizer15\TradingBot\Configuration;
 
 final readonly class TradingConfiguration
 {
-
     /** @var string[] */
     public array $symbols;
     public float $investmentPerTrade;
@@ -14,7 +13,8 @@ final readonly class TradingConfiguration
     public float $takeProfitPercentage;
 
 
-    public function __construct(private array $config) {
+    public function __construct(private array $config)
+    {
         $this->symbols = $config['trading']['symbols'] ?? ['BTC', 'ETH', 'BNB'];
         $this->baseCurrency = $config['trading']['base_currency'] ?? 'USDT';
         $this->stopLossPercentage = $config['trading']['stop_loss_percentage'] ?? 2.5;
