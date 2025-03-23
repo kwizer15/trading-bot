@@ -3,6 +3,7 @@
 namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
+use Kwizer15\TradingBot\DTO\Position;
 
 final class MovingAverageStrategy implements StrategyInterface
 {
@@ -77,7 +78,7 @@ final class MovingAverageStrategy implements StrategyInterface
      * Vérifie si un croisement baissier (Death Cross) s'est produit
      * (SMA courte croise en-dessous de SMA longue)
      */
-    public function shouldSell(KlineHistory $history, array $position): bool
+    public function shouldSell(KlineHistory $history): bool
     {
         try {
             // Calculer la SMA courte et longue actuelles
@@ -139,7 +140,7 @@ final class MovingAverageStrategy implements StrategyInterface
     {
     }
 
-    public function onBuy(array $position): void
+    public function onBuy(Position $position): void
     {
     }
 

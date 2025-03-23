@@ -4,25 +4,26 @@ namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\DTO\Order;
+use Kwizer15\TradingBot\DTO\Position;
 
 interface PositionActionStrategyInterface extends StrategyInterface
 {
     /**
      * Détermine l'action à effectuer sur une position
      *
-     * @param KlineHistory $marketData Données du marché (klines)
-     * @param array $position Informations sur la position ouverte
+     * @param KlineHistory $history Données du marché (klines)
+     * @param Position $position Informations sur la position ouverte
      *
      * @return PositionAction Action à effectuer
      */
-    public function getPositionAction(KlineHistory $marketData, array $position): PositionAction;
+    public function getPositionAction(KlineHistory $history, Position $position): PositionAction;
 
-    public function calculateIncreasePercentage(KlineHistory $marketData, array $position): float;
+    public function calculateIncreasePercentage(KlineHistory $marketData, Position $position): float;
 
-    public function calculateExitPercentage(KlineHistory $marketData, array $position): float;
+    public function calculateExitPercentage(KlineHistory $marketData, Position $position): float;
 
-    public function onIncreasePosition(array $position, Order $order): void;
+    public function onIncreasePosition(Position $position, Order $order): void;
 
-    public function onPartialExit(array $position, Order $order): void;
+    public function onPartialExit(Position $position, Order $order): void;
 
 }

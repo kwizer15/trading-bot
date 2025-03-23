@@ -4,8 +4,9 @@ namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\DTO\Order;
+use Kwizer15\TradingBot\DTO\Position;
 
-class DynamicPositionStrategy implements PositionActionStrategyInterface
+final class DynamicPositionStrategy implements PositionActionStrategyInterface
 {
     // Paramètres par défaut de la stratégie
     private array $params = [
@@ -64,7 +65,7 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
     /**
      * Analyse les données du marché et détermine si un signal de vente est présent
      */
-    public function shouldSell(KlineHistory $history, array $position): bool
+    public function shouldSell(KlineHistory $history): bool
     {
         return false;
     }
@@ -72,10 +73,10 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
     /**
      * Détermine l'action à effectuer sur une position
      */
-    public function getPositionAction(KlineHistory $history, array $position): PositionAction
+    public function getPositionAction(KlineHistory $history, Position $position): PositionAction
     {
         // Extraire les klines et le symbole
-        $symbol = $position['symbol'];
+        $symbol = $position->symbol;
 
         // Obtenir le timestamp actuel depuis les données de marché (pour le backtest)
         $currentTime = $history->last()->closeTime;
@@ -86,11 +87,11 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
         }
 
         // Mettre à jour les données de position
-        $this->updatePositionData($symbol, $position, $history);
+        $this->updatePositionData($symbol, $position);
 
         // Vérifier le stop loss d'abord
         $stopLossPrice = $this->positionData[$symbol]['stop_loss_price'];
-        $currentPrice = $position['current_price'];
+        $currentPrice = $position->current_price;
 
         if ($currentPrice <= $stopLossPrice) {
             // Stop loss atteint
@@ -103,53 +104,33 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
         $lastAnalysisTime = $this->positionData[$symbol]['last_analysis_time'];
         $analysisPeriodMs = $this->params['analysis_period'] * 3600 * 1000;
 
-        if ($currentTime - $lastAnalysisTime >= $analysisPeriodMs) {
-            // Mettre à jour le timestamp de la dernière analyse
-            $this->positionData[$symbol]['last_analysis_time'] = $currentTime;
+        if ($currentTime - $lastAnalysisTime < $analysisPeriodMs) {
+            return PositionAction::HOLD;
+        }
+        // Mettre à jour le timestamp de la dernière analyse
+        $this->positionData[$symbol]['last_analysis_time'] = $currentTime;
+        $this->savePositionData();
 
-            // Récupérer le prix d'entrée moyen et le prix actuel
-            $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity']);
+        // Récupérer le prix d'entrée moyen et le prix actuel
+        $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity']);
 
-            // Calculer la performance actuelle
-            $performancePct = (($currentPrice - $entryPrice) / $entryPrice) * 100;
+        // Calculer la performance actuelle
+        $performancePct = (($currentPrice - $entryPrice) / $entryPrice) * 100;
 
-            if ($performancePct > 0 && $this->params['partial_take_profit']) {
-                //                    $initialInvestment = $this->positionData[$symbol]['initial_investment'];
-                //                    $currentValue = $position['current_value'];
+        if ($performancePct > 0 && $this->params['partial_take_profit']) {
 
-                //                     Calculer le profit en montant
-                //                    $profit = $currentValue - $initialInvestment;
-
-                //                    if ($profit > 0) {
-                $this->savePositionData();
-
-                return PositionAction::PARTIAL_EXIT;
-                //                    }
-            }
-
-            // Le prix a baissé, envisager d'augmenter la position
-            $decreasePct = abs($performancePct);
-
-            // Vérifier si la baisse justifie une augmentation de position
-            //                if ($decreasePct >= $this->params['position_increase_pct']) {
-            // Calculer le multiplicateur actuel
-            $initialInvestment = $this->positionData[$symbol]['initial_investment'];
-            $currentInvestment = $this->positionData[$symbol]['total_investment'];
-            $currentMultiplier = $currentInvestment / $initialInvestment;
-
-            // Vérifier si nous pouvons encore augmenter la position
-            if ($currentMultiplier < $this->params['max_investment_multiplier']) {
-                $this->savePositionData();
-
-                return PositionAction::INCREASE_POSITION;
-            }
-            //                }
-
-            // Sauvegarder les données de position
-            $this->savePositionData();
+            return PositionAction::PARTIAL_EXIT;
         }
 
-        // Par défaut, maintenir la position
+        $initialInvestment = $this->positionData[$symbol]['initial_investment'];
+        $currentInvestment = $this->positionData[$symbol]['total_investment'];
+        $currentMultiplier = $currentInvestment / $initialInvestment;
+
+        if ($currentMultiplier < $this->params['max_investment_multiplier']) {
+
+            return PositionAction::INCREASE_POSITION;
+        }
+
         return PositionAction::HOLD;
     }
 
@@ -170,22 +151,22 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
     /**
      * Initialise les données d'une nouvelle position
      */
-    public function onBuy(array $position): void
+    public function onBuy(Position $position): void
     {
-        $symbol = $position['symbol'];
-        $entryPrice = $position['entry_price'];
-        $initialInvestment = $position['cost'];
+        $symbol = $position->symbol;
+        $entryPrice = $position->entry_price;
+        $initialInvestment = $position->cost;
         $this->positionData[$symbol] = [
             'symbol' => $symbol,
             'initial_entry_price' => $entryPrice,
             'avg_entry_price' => $entryPrice,
             'initial_investment' => $initialInvestment,
             'total_investment' => $initialInvestment,
-            'initial_quantity' => $position['quantity'],
-            'quantity' => $position['quantity'],
-            'total_quantity' => $position['quantity'],
-            'entry_time' => $position['timestamp'],
-            'last_analysis_time' => $position['timestamp'],
+            'initial_quantity' => $position->quantity,
+            'quantity' => $position->quantity,
+            'total_quantity' => $position->quantity,
+            'entry_time' => $position->timestamp,
+            'last_analysis_time' => $position->timestamp,
             'stop_loss_price' => $entryPrice * (1 - ($this->params['initial_stop_loss_pct'] / 100)),
             'partial_exits' => [],
             'additional_entries' => [],
@@ -202,15 +183,11 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
     /**
      * Met à jour les données d'une position existante
      */
-    private function updatePositionData(string $symbol, array $position, KlineHistory $klines): void
+    private function updatePositionData(string $symbol, Position $positionObject): void
     {
         // Mettre à jour les valeurs actuelles
-        $this->positionData[$symbol]['current_price'] = $position['current_price'];
-        $this->positionData[$symbol]['current_value'] = $position['current_value'];
-
-        // S'il y a eu des opérations d'augmentation ou de sortie partielle,
-        // nous devons mettre à jour certaines valeurs en conséquence
-        // (cela serait normalement fait dans les méthodes d'augmentation/sortie partielle)
+        $this->positionData[$symbol]['current_price'] = $positionObject->current_price;
+        $this->positionData[$symbol]['current_value'] = $positionObject->current_value;
 
         $this->savePositionData();
     }
@@ -453,9 +430,9 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
     }
 
 
-    public function calculateIncreasePercentage(KlineHistory $marketData, array $position): float
+    public function calculateIncreasePercentage(KlineHistory $marketData, Position $position): float
     {
-        $symbol = $position['symbol'];
+        $symbol = $position->symbol;
         $currentPrice = $marketData->last()->close;
         $investment = $this->positionData[$symbol]['total_investment'];
         $equity = $currentPrice * $this->positionData[$symbol]['quantity'];
@@ -465,13 +442,13 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
 
     /**
      * Calcule le pourcentage de la position à sortir lors d'une sortie partielle
-     * @param array $position Données de la position
-     * @param array $marketData Données du marché (klines)
+     * @param KlineHistory $marketData Données du marché (klines)
+     * @param Position $position Données de la position
      * @return float Pourcentage à sortir
      */
-    public function calculateExitPercentage(KlineHistory $marketData, array $position): float
+    public function calculateExitPercentage(KlineHistory $marketData, Position $position): float
     {
-        $symbol = $position['symbol'];
+        $symbol = $position->symbol;
         $currentPrice = $marketData->last()->close;
         $investment = $this->positionData[$symbol]['total_investment'];
         $equity = $currentPrice * $this->positionData[$symbol]['quantity'];
@@ -479,20 +456,19 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface
         return (($equity - $investment) / $investment) * 100;
     }
 
-    public function onPartialExit(array $position, Order $order): void
+    public function onPartialExit(Position $position, Order $order): void
     {
-        $symbol = $position['symbol'];
+        $symbol = $position->symbol;
 
         $this->positionData[$symbol]['quantity'] -= $order->quantity;
-        //        $this->positionData[$symbol]['total_investment'] -= $order->quantity * $order->price;
         $this->updateStopLoss($symbol);
         $this->savePositionData();
         echo 'Sortie partielle de la position : ' . $symbol . ' - Quantité : ' . $order->quantity . ' - Prix : ' . $order->price . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
     }
 
-    public function onIncreasePosition(array $position, Order $order): void
+    public function onIncreasePosition(Position $position, Order $order): void
     {
-        $symbol = $position['symbol'];
+        $symbol = $position->symbol;
 
         $this->positionData[$symbol]['total_investment'] += $order->quantity * $order->price;
         $this->positionData[$symbol]['quantity'] += $order->quantity;

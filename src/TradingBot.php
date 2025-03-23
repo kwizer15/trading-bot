@@ -5,6 +5,7 @@ namespace Kwizer15\TradingBot;
 use Kwizer15\TradingBot\Clock\RealClock;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
+use Kwizer15\TradingBot\DTO\Position;
 use Kwizer15\TradingBot\DTO\PositionList;
 use Kwizer15\TradingBot\Strategy\PositionAction;
 use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
@@ -57,6 +58,10 @@ class TradingBot
      */
     public function increasePosition(string $symbol, float $additionalInvestment): void
     {
+        if (!$this->strategy instanceof PositionActionStrategyInterface) {
+            throw new \InvalidArgumentException('La stratégie doit supporter les actions de position');
+        }
+
         try {
             // Vérifier si nous avons cette position
             if (!$this->positionList->hasPositionForSymbol($symbol)) {
@@ -77,7 +82,8 @@ class TradingBot
             $order = $this->binanceAPI->buyMarket($symbol, $additionalQuantity);
 
             $position = $this->positionList->increasePosition($symbol, $order);
-            $this->strategy->onIncreasePosition($position, $order);
+            $positionObject = Position::fromArray($position);
+            $this->strategy->onIncreasePosition($positionObject, $order);
             $this->logger->notice("Position {$symbol} augmentée de {$additionalQuantity} {$symbol}");
         } catch (\Exception $e) {
             $this->logger->error("Erreur lors de l'augmentation de la position {$symbol}: " . $e->getMessage());
@@ -94,6 +100,10 @@ class TradingBot
      */
     public function partialExit(string $symbol, float $exitPercentage): void
     {
+        if (!$this->strategy instanceof PositionActionStrategyInterface) {
+            throw new \InvalidArgumentException('La stratégie doit supporter les actions de position');
+        }
+
         try {
             // Vérifier si nous avons cette position
             if (!$this->positionList->hasPositionForSymbol($symbol)) {
@@ -119,7 +129,8 @@ class TradingBot
             $order = $this->binanceAPI->sellMarket($symbol, $quantityToSell);
 
             $position = $this->positionList->partialExit($symbol, $order->quantity, $order->fee);
-            $this->strategy->onPartialExit($position, $order);
+            $positionObject = Position::fromArray($position);
+            $this->strategy->onPartialExit($positionObject, $order);
             $this->logger->notice("Sortie partielle de {$symbol} de {$order->quantity} {$symbol}");
         } catch (\Exception $e) {
             $this->logger->error("Erreur lors de la sortie partielle de {$symbol}: " . $e->getMessage());
@@ -144,18 +155,18 @@ class TradingBot
         try {
             // Obtenir le prix actuel
             $currentPrice = $this->binanceAPI->getCurrentPrice($symbol);
-            $position = $this->positionList->updatePosition($symbol, $currentPrice);
+            $positionObject = $this->positionList->updatePosition($symbol, $currentPrice);
 
             // Vérifier le stop loss général
             if ($this->positionList->isStopLossTriggered($symbol, $this->tradingConfiguration->stopLossPercentage)) {
-                $this->logger->notice("Stop loss déclenché pour {$symbol} (perte: {$position['profit_loss_pct']}%)");
+                $this->logger->notice("Stop loss déclenché pour {$symbol} (perte: {$positionObject->profit_loss_pct}%)");
                 $this->sell($symbol);
                 return;
             }
 
             // Vérifier le take profit général
             if ($this->positionList->isTakeProfitTriggered($symbol, $this->tradingConfiguration->takeProfitPercentage)) {
-                $this->logger->notice("Take profit déclenché pour {$symbol} (gain: {$position['profit_loss_pct']}%)");
+                $this->logger->notice("Take profit déclenché pour {$symbol} (gain: {$positionObject->profit_loss_pct}%)");
                 $this->sell($symbol);
                 return;
             }
@@ -166,7 +177,7 @@ class TradingBot
 
             // Vérifier si la stratégie supporte les actions spéciales
             if ($this->strategy instanceof PositionActionStrategyInterface) {
-                $action = $this->strategy->getPositionAction($dtoKlines, $position);
+                $action = $this->strategy->getPositionAction($dtoKlines, $positionObject);
 
                 switch ($action) {
                     case PositionAction::SELL:
@@ -175,33 +186,34 @@ class TradingBot
                         break;
 
                     case PositionAction::INCREASE_POSITION:
-                        $percentIncrease = $this->strategy->calculateIncreasePercentage($dtoKlines, $position);
+                        $percentIncrease = $this->strategy->calculateIncreasePercentage($dtoKlines, $positionObject);
                         $additionalInvestment = $this->calculateAdditionalInvestment($percentIncrease);
                         $this->logger->notice("Signal d'augmentation de position pour {$symbol}");
                         $this->increasePosition($symbol, $additionalInvestment);
                         break;
 
                     case PositionAction::PARTIAL_EXIT:
-                        $exitPercentage = $this->strategy->calculateExitPercentage($dtoKlines, $position);
+                        $exitPercentage = $this->strategy->calculateExitPercentage($dtoKlines, $positionObject);
                         $this->logger->notice("Signal de sortie partielle pour {$symbol}");
                         $this->partialExit($symbol, $exitPercentage);
                         break;
 
                     case PositionAction::HOLD:
                     default:
-                        $this->logger->info("Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
+                        $this->logger->info("Position maintenue pour {$symbol} (P/L: {$positionObject->profit_loss_pct}%)");
                         break;
                 }
                 return;
             }
+
             // Utiliser l'approche classique shouldSell
-            if ($this->strategy->shouldSell($dtoKlines, $position)) {
+            if ($this->strategy->shouldSell($dtoKlines)) {
                 $this->logger->info("Signal de vente détecté pour {$symbol}");
                 $this->sell($symbol);
                 return;
             }
 
-            $this->logger->info("Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
+            $this->logger->info("Position maintenue pour {$symbol} (P/L: {$positionObject->profit_loss_pct}%)");
         } catch (\Exception $e) {
             $this->logger->error("Erreur lors de la gestion de la position {$symbol}: " . $e->getMessage());
         }
@@ -287,7 +299,7 @@ class TradingBot
                 $order->orderId,
                 $order->fee,
             );
-            $this->strategy->onBuy($position);
+            $this->strategy->onBuy(Position::fromArray($position));
         } catch (\Exception $e) {
             $this->logger->error("Erreur lors de l'achat de {$symbol}: " . $e->getMessage());
         }
@@ -315,25 +327,25 @@ class TradingBot
             // Exécuter l'ordre de vente
             $order = $this->binanceAPI->sellMarket($symbol, $quantityToSell);
 
-            $position = $this->positionList->getPositionForSymbol($symbol);
+            $positionObject = $this->positionList->getPositionForSymbol($symbol);
             $saleValue = $order->price * $order->quantity;
-            $totalFee = $order->fee + $position['total_buy_fees'] + $position['total_sell_fees'];
-            $profit = $saleValue - $position['cost'] - $totalFee;
-            $profitPct = ($profit / $position['cost']) * 100;
+            $totalFee = $order->fee + $positionObject->total_buy_fees + $positionObject->total_sell_fees;
+            $profit = $saleValue - $positionObject->cost - $totalFee;
+            $profitPct = ($profit / $positionObject->cost) * 100;
 
             $this->trades[] = [
                 'symbol' => $symbol,
-                'entry_price' => $position['entry_price'],
+                'entry_price' => $positionObject->entry_price,
                 'exit_price' => $order->price,
-                'entry_time' => $position['timestamp'],
+                'entry_time' => $positionObject->timestamp,
                 'exit_time' => $order->timestamp,
                 'quantity' => $order->quantity,
-                'cost' => $position['cost'],
+                'cost' => $positionObject->cost,
                 'sale_value' => $saleValue,
                 'fees' => $totalFee,
                 'profit' => $profit,
                 'profit_pct' => $profitPct,
-                'duration' => ($order->timestamp - $position['timestamp']) / (60 * 60 * 1000) // Durée en heures
+                'duration' => ($order->timestamp - $positionObject->timestamp) / (60 * 60 * 1000) // Durée en heures
             ];
 
             $this->positionList->sell($symbol);

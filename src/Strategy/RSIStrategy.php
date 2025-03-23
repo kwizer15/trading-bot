@@ -3,6 +3,7 @@
 namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
+use Kwizer15\TradingBot\DTO\Position;
 
 final class RSIStrategy implements StrategyInterface
 {
@@ -91,7 +92,7 @@ final class RSIStrategy implements StrategyInterface
         }
     }
 
-    public function shouldSell(KlineHistory $history, array $position): bool
+    public function shouldSell(KlineHistory $history): bool
     {
         try {
             // Calculer le RSI actuel
@@ -151,7 +152,7 @@ final class RSIStrategy implements StrategyInterface
     {
     }
 
-    public function onBuy(array $position): void
+    public function onBuy(Position $position): void
     {
     }
 

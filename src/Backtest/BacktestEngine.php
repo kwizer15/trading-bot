@@ -7,6 +7,7 @@ use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\Balance;
 use Kwizer15\TradingBot\DTO\KlineHistory;
+use Kwizer15\TradingBot\DTO\Position;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
 use Kwizer15\TradingBot\TradingBot;
 use Kwizer15\TradingBot\Utils\ConsoleLogger;
@@ -51,8 +52,8 @@ class BacktestEngine
             // Enregistrer l'équité à chaque étape
             $totalEquity = $this->balance->free;
             foreach ($tradingBot->getPositions()->iterateSymbols() as $symbol) {
-                $position = $tradingBot->getPositions()->getPositionForSymbol($symbol);
-                $totalEquity += $position['current_value'];
+                $positionObject = $tradingBot->getPositions()->getPositionForSymbol($symbol);
+                $totalEquity += $positionObject->current_value;
             }
 
             $this->equity[] = [
