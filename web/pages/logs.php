@@ -20,6 +20,10 @@
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="warning">Warning</a></li>
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="error">Error</a></li>
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="debug">Debug</a></li>
+                    <li><a class="dropdown-item log-strategy-filter" href="#" data-filter="DynamicPositionStrategy">Dynamic Strategy</a></li>
+                    <li><a class="dropdown-item log-strategy-filter" href="#" data-filter="position_increased">Augmentation de position</a></li>
+                    <li><a class="dropdown-item log-strategy-filter" href="#" data-filter="partial_exit">Sortie partielle</a></li>
+                    <li><a class="dropdown-item log-strategy-filter" href="#" data-filter="stop_loss_updated">Mise à jour stop-loss</a></li>
                 </ul>
             </div>
         </div>
@@ -45,24 +49,23 @@
         <div class="card-body log-container">
             <?php
             $logs = get_logs();
-
-            if (empty($logs)):
-                ?>
-                <div class="alert alert-info">Aucun log disponible.</div>
-            <?php else: ?>
-                <?php foreach ($logs as $log): ?>
-                    <div class="log-line log-line-<?php echo strtolower($log['level']); ?>" data-level="<?php echo strtolower($log['level']); ?>">
-                        <small class="text-muted">[<?php echo $log['timestamp']; ?>]</small>
-                        <span class="badge bg-<?php
-                        echo strtolower($log['level']) === 'info' ? 'primary' :
-                            (strtolower($log['level']) === 'warning' ? 'warning' :
-                                (strtolower($log['level']) === 'error' ? 'danger' : 'secondary'));
-                        ?>">
-                            <?php echo strtoupper($log['level']); ?>
-                        </span>
-                        <?php echo htmlspecialchars($log['message']); ?>
+            $hasLog = false;
+            foreach ($logs as $log): ?>
+                <?php $hasLog = true; ?>
+                <div class="log-line log-line-<?php echo strtolower($log['level']); ?>" data-level="<?php echo strtolower($log['level']); ?>">
+                    <small class="text-muted">[<?php echo $log['timestamp']; ?>]</small>
+                    <span class="badge bg-<?php
+                    echo strtolower($log['level']) === 'info' ? 'primary' :
+                        (strtolower($log['level']) === 'warning' ? 'warning' :
+                            (strtolower($log['level']) === 'error' ? 'danger' : 'secondary'));
+                    ?>">
+                        <?php echo strtoupper($log['level']); ?>
+                    </span>
+                    <?php echo htmlspecialchars($log['message']); ?>
                     </div>
-                <?php endforeach; ?>
+            <?php endforeach;
+                  if (!$hasLog): ?>
+            <div class="alert alert-info">Aucun log disponible.</div>
             <?php endif; ?>
         </div>
     </div>
@@ -80,6 +83,24 @@
 
             const level = $(this).data('level');
             filterLogs();
+        });
+
+        $('.log-strategy-filter').on('click', function(e) {
+            e.preventDefault();
+
+            // Mettre à jour le bouton actif
+            $('.log-level-filter').removeClass('active');
+            $(this).addClass('active');
+
+            const filter = $(this).data('filter');
+
+            // Filtrer les logs
+            $('.log-line').each(function() {
+                const $line = $(this);
+                const lineText = $line.text().toLowerCase();
+
+                $line.toggle(lineText.includes(filter.toLowerCase()));
+            });
         });
 
         // Recherche dans les logs

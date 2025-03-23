@@ -4,10 +4,12 @@ namespace Kwizer15\TradingBot\Backtest;
 
 use Kwizer15\TradingBot\BinanceAPI;
 
-class DataLoader {
+final class DataLoader
+{
     private $binanceAPI;
 
-    public function __construct(BinanceAPI $binanceAPI) {
+    public function __construct(BinanceAPI $binanceAPI)
+    {
         $this->binanceAPI = $binanceAPI;
     }
 
@@ -15,7 +17,8 @@ class DataLoader {
      * Télécharge des données historiques depuis Binance
      * Version améliorée pour gérer de plus grandes périodes
      */
-    public function downloadHistoricalData($symbol, $interval = '1h', $startTime = null, $endTime = null) {
+    public function downloadHistoricalData($symbol, $interval = '1h', $startTime = null, $endTime = null)
+    {
         $klines = [];
         $limit = 1000; // Nombre maximum de klines par requête
 
@@ -32,7 +35,7 @@ class DataLoader {
         }
 
         // Logging pour debug
-        echo "Téléchargement des données de " . date('Y-m-d', $startTime/1000) . " à " . date('Y-m-d', $endTime/1000) . "\n";
+        echo "Téléchargement des données de " . date('Y-m-d', $startTime / 1000) . " à " . date('Y-m-d', $endTime / 1000) . "\n";
 
         $currentStartTime = $startTime;
 
@@ -41,24 +44,16 @@ class DataLoader {
             // Calculer l'heure de fin pour cette requête
             $currentEndTime = min($endTime, $currentStartTime + ($limit * $this->getIntervalInMilliseconds($interval)));
 
-            $params = [
-                'symbol' => $symbol,
-                'interval' => $interval,
-                'limit' => $limit,
-                'startTime' => $currentStartTime,
-                'endTime' => $currentEndTime
-            ];
-
             try {
                 // Effectuer la requête API
                 $response = $this->binanceAPI->getKlines($symbol, $interval, $limit, $currentStartTime, $currentEndTime);
 
                 if (empty($response)) {
-                    echo "Aucune donnée reçue pour la période " . date('Y-m-d', $currentStartTime/1000) . " à " . date('Y-m-d', $currentEndTime/1000) . "\n";
+                    echo "Aucune donnée reçue pour la période " . date('Y-m-d', $currentStartTime / 1000) . " à " . date('Y-m-d', $currentEndTime / 1000) . "\n";
                     break;
                 }
 
-                echo "Reçu " . count($response) . " bougies pour la période " . date('Y-m-d', $currentStartTime/1000) . " à " . date('Y-m-d', $currentEndTime/1000) . "\n";
+                echo "Reçu " . count($response) . " bougies pour la période " . date('Y-m-d', $currentStartTime / 1000) . " à " . date('Y-m-d', $currentEndTime / 1000) . "\n";
 
                 $klines = array_merge($klines, $response);
 
@@ -68,7 +63,7 @@ class DataLoader {
 
                 // Petite pause pour ne pas dépasser les limites de l'API
                 usleep(300000); // 300ms
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 echo "Erreur lors de la récupération des données: " . $e->getMessage() . "\n";
                 // Attendre un peu plus longtemps en cas d'erreur
                 sleep(2);
@@ -85,7 +80,8 @@ class DataLoader {
     /**
      * Enregistre les données historiques dans un fichier CSV
      */
-    public function saveToCSV($data, $filePath) {
+    public function saveToCSV($data, $filePath): void
+    {
         $dir = dirname($filePath);
 
         if (!is_dir($dir)) {
@@ -103,19 +99,18 @@ class DataLoader {
         }
 
         fclose($file);
-
-        return true;
     }
 
     /**
      * Charge les données historiques depuis un fichier CSV
+     *
+     * @return \Generator<array<int, string>>
      */
-    public function loadFromCSV($filePath) {
+    public function loadFromCSV($filePath): iterable
+    {
         if (!file_exists($filePath)) {
-            throw new Exception("Le fichier {$filePath} n'existe pas");
+            throw new \Exception("Le fichier {$filePath} n'existe pas");
         }
-
-        $data = [];
 
         $file = fopen($filePath, 'r');
 
@@ -124,18 +119,17 @@ class DataLoader {
 
         // Lire les données
         while (($row = fgetcsv($file)) !== false) {
-            $data[] = $row;
+            yield $row;
         }
 
         fclose($file);
-
-        return $data;
     }
 
     /**
      * Convertit un intervalle en millisecondes
      */
-    private function getIntervalInMilliseconds($interval) {
+    private function getIntervalInMilliseconds($interval)
+    {
         $unit = substr($interval, -1);
         $value = intval(substr($interval, 0, -1));
 
@@ -151,7 +145,7 @@ class DataLoader {
             case 'M': // mois (approximatif)
                 return $value * 30 * 24 * 60 * 60 * 1000;
             default:
-                throw new Exception("Intervalle non reconnu: {$interval}");
+                throw new \Exception("Intervalle non reconnu: {$interval}");
         }
     }
 }

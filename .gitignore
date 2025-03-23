@@ -9,3 +9,4 @@
 /bin/daemon.sh
 /bin/stop.sh
 /config/config.php
+.php-cs-fixer.cache

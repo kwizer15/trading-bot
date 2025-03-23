@@ -97,17 +97,14 @@ function get_strategies() {
 /**
  * Récupère les logs du bot
  */
-function get_logs($max_lines = null) {
+function get_logs($max_lines = null): iterable {
     $log_file = get_config('logging')['file'];
 
     if (!file_exists($log_file)) {
         return [];
     }
 
-    if ($max_lines === null) {
-        $max_lines = get_config('max_log_lines');
-    }
-
+    $max_lines ??= get_config('max_log_lines');
     $logs = [];
     $handle = fopen($log_file, 'r');
 
@@ -123,30 +120,25 @@ function get_logs($max_lines = null) {
             fgets($handle);
         }
 
-        $count = 0;
         while (($line = fgets($handle)) !== false) {
             // Parser la ligne de log
-            if (preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] (.+)$/', $line, $matches)) {
-                $logs[] = [
-                    'timestamp' => $matches[1],
-                    'level' => $matches[2],
-                    'message' => $matches[3]
-                ];
-
-                $count++;
-                if ($max_lines > 0 && $count >= $max_lines) {
-                    break;
-                }
+            if (!preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] (.+)$/', $line, $matches)) {
+                continue;
             }
+            $logs[] = [
+                'timestamp' => $matches[1],
+                'level' => $matches[2],
+                'message' => $matches[3]
+            ];
         }
 
         fclose($handle);
     }
 
-    // Trier par timestamp (plus récent en premier)
-    usort($logs, function($a, $b) {
-        return strtotime($b['timestamp']) - strtotime($a['timestamp']);
-    });
+    $count = $max_lines;
+    while ($count-- > 0 && $logs !== []) {
+        yield array_pop($logs);
+    }
 
     return $logs;
 }

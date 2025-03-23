@@ -4,10 +4,13 @@
     "type": "project",
     "require": {
         "php": "^8.2",
-        "psr/log": "^3.0"
+        "ext-curl": "*",
+        "psr/log": "^3.0",
+        "psr/clock": "^1.0"
     },
     "require-dev": {
-        "phpstan/phpstan": "^2.1"
+        "phpstan/phpstan": "^2.1",
+        "friendsofphp/php-cs-fixer": "^3.73"
     },
     "license": "MIT",
     "autoload": {

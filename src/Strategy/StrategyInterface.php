@@ -1,23 +1,27 @@
 <?php
 
 namespace Kwizer15\TradingBot\Strategy;
-interface StrategyInterface {
+
+use Kwizer15\TradingBot\DTO\KlineHistory;
+
+interface StrategyInterface
+{
     /**
      * Analyse les données du marché et détermine si un signal d'achat est présent
      *
-     * @param array $marketData Données du marché (klines)
+     * @param KlineHistory $history Données du marché (klines)
      * @return bool True si un signal d'achat est détecté, sinon False
      */
-    public function shouldBuy(array $marketData): bool;
+    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool;
 
     /**
      * Analyse les données du marché et détermine si un signal de vente est présent
      *
-     * @param array $marketData Données du marché (klines)
+     * @param KlineHistory $history Données du marché (klines)
      * @param array $position Informations sur la position ouverte
      * @return bool True si un signal de vente est détecté, sinon False
      */
-    public function shouldSell(array $marketData, array $position): bool;
+    public function shouldSell(KlineHistory $history, array $position): bool;
 
     /**
      * Obtient le nom de la stratégie
@@ -47,4 +51,11 @@ interface StrategyInterface {
      * @return array Paramètres actuels
      */
     public function getParameters(): array;
+    public function getParameter(string $key, mixed $default = null): mixed;
+
+
+    public function onSell(string $symbol, float $currentPrice): void;
+    public function onBuy(array $position): void;
+
+    public function getInvestment(string $symbol, float $currentPrice): ?float;
 }

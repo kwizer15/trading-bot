@@ -206,7 +206,7 @@ body {
 
 .log-line {
     font-family: monospace;
-    white-space: pre-wrap;
+    /*white-space: pre-wrap;*/
     font-size: 0.85rem;
     padding: 2px 5px;
     margin-bottom: 1px;

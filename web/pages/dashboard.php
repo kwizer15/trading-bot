@@ -15,6 +15,7 @@
         <?php
         // Calculer les statistiques
         use Kwizer15\TradingBot\BinanceAPI;
+        use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 
         $positions = get_positions();
         $trade_history = get_trade_history();
@@ -26,11 +27,11 @@
         // Récupérer le solde depuis Binance si possible
         try {
             $config = get_config();
-            $binanceAPI = new BinanceAPI($config);
+            $binanceAPI = new BinanceAPI(new ApiConfiguration($config));
 
             $base_currency = $config['trading']['base_currency'];
             $balance_data = $binanceAPI->getBalance($base_currency);
-            $balance = $balance_data['free'] + $balance_data['locked'];
+            $balance = $balance_data->free + $balance_data->locked;
         } catch (Exception $e) {
             // Utiliser une valeur par défaut
             $balance = $config['backtest']['initial_balance'];
@@ -122,6 +123,26 @@
                             <div class="small">Valeur: <?php echo format_currency($positions_value); ?></div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3 d-none" id="dynamic-strategy-info">
+            <div class="card-header bg-light">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Fonctionnement de la Dynamic Position Strategy
+                </h6>
+            </div>
+            <div class="card-body">
+                <p class="small">Cette stratégie gère dynamiquement vos positions avec les caractéristiques suivantes :</p>
+                <ul class="small">
+                    <li><strong>Analyse périodique :</strong> Toutes les <span id="analysis-period">24</span> heures, chaque position est réévaluée</li>
+                    <li><strong>Profits partiels :</strong> En cas de hausse, une partie de la position (<span id="exit-percentage">30</span>%) peut être vendue</li>
+                    <li><strong>Augmentation progressive :</strong> En cas de baisse de <span id="increase-threshold">5</span>%, la position peut être augmentée</li>
+                    <li><strong>Stop-loss dynamique :</strong> Le stop-loss est recalculé après chaque modification</li>
+                </ul>
+                <div class="text-end">
+                    <button class="btn btn-sm btn-outline-secondary" id="hide-strategy-info">Masquer</button>
                 </div>
             </div>
         </div>
@@ -331,6 +352,34 @@
                     }
                 });
             }
+        });
+
+        $.ajax({
+            url: 'api.php',
+            data: { action: 'get_current_strategy' },
+            method: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                if (response.success && response.data) {
+                    const strategy = response.data;
+
+                    if (strategy.class === 'DynamicPositionStrategy') {
+                        $('#dynamic-strategy-info').removeClass('d-none');
+
+                        // Mettre à jour les valeurs
+                        if (strategy.parameters) {
+                            $('#analysis-period').text(strategy.parameters.analysis_period || 24);
+                            $('#exit-percentage').text(strategy.parameters.partial_exit_pct || 30);
+                            $('#increase-threshold').text(strategy.parameters.position_increase_pct || 5);
+                        }
+                    }
+                }
+            }
+        });
+
+        // Masquer l'info de stratégie
+        $('#hide-strategy-info').on('click', function() {
+            $('#dynamic-strategy-info').addClass('d-none');
         });
     });
 </script>
