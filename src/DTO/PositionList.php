@@ -7,6 +7,9 @@ use Psr\Log\LoggerInterface;
 
 class PositionList
 {
+    /**
+     * @var array <string, Position>
+     */
     private array $positions = [];
     private bool $loaded = false;
 
@@ -24,7 +27,11 @@ class PositionList
         }
 
         if (file_exists($this->positionsFile)) {
-            $this->positions = json_decode(file_get_contents($this->positionsFile), true);
+            $positions = json_decode(file_get_contents($this->positionsFile), true);
+            foreach ($positions as $position) {
+                $positionObject = Position::fromArray($position);
+                $this->positions[$positionObject->symbol] = $positionObject;
+            }
             $this->logger->info('Positions chargées: ' . count($this->positions));
         } else {
             $this->logger->info('Aucune position existante trouvée');
@@ -44,8 +51,8 @@ class PositionList
     public function getPositionForSymbol(string $symbol): Position
     {
         $this->load();
-        if (isset($this->positions[$symbol])) {
-            return Position::fromArray($this->positions[$symbol]);
+        if ($this->hasPositionForSymbol($symbol)) {
+            return $this->positions[$symbol];
         }
 
         throw new \InvalidArgumentException("Aucune position trouvée pour {$symbol}");
@@ -59,82 +66,49 @@ class PositionList
     public function increasePosition(
         string $symbol,
         Order $order,
-    ): array {
+    ): Position {
         $this->load();
 
-        $currentPrice = $order->price;
-        $position = $this->positions[$symbol];
-        $totalQuantity = $position['quantity'] + $order->quantity;
-        $cost = $position['cost'] + ($order->quantity * $order->price);
-        $entryPrice = $cost / $totalQuantity;
-
-        $currentValue = $totalQuantity * $currentPrice;
-        $profitLoss = $currentValue - $cost;
-        $this->positions[$symbol] = [
-            'entry_price' => $entryPrice,
-            'quantity' => $totalQuantity,
-            'cost' => $cost,
-            'current_price' => $currentPrice,
-            'current_value' => $currentValue,
-            'profit_loss' => $profitLoss,
-            'profit_loss_pct' => ($profitLoss / $cost) * 100,
-            'order_id' => $position['order_id'].'/'.$order->orderId,
-            'total_buy_fees' => $position['total_buy_fees'] + $order->fee,
-        ] + $this->positions[$symbol];
+        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->increase($order);
 
         $this->save();
 
-        $this->logger->info("Position augmentée pour {$symbol}: +{$order->quantity} au prix de {$currentPrice}");
+        $this->logger->info("Position augmentée pour {$symbol}: +{$order->quantity} au prix de {$order->price}");
 
         return $this->positions[$symbol];
     }
 
-    public function partialExit(string $symbol, float $quantityToSell, float $fees): array
+    public function partialExit(string $symbol, float $quantityToSell, float $fees): Position
     {
         $this->load();
 
-        $position = $this->positions[$symbol];
-
-        $remainingQuantity = $position['quantity'] - $quantityToSell;
-        $remainingCost = $position['cost'] * ($remainingQuantity / $position['quantity']);
-
-        $currentPrice = $position['current_price'];
-        $currentValue = $remainingQuantity * $currentPrice;
-        $profitLoss = $currentValue - $remainingCost;
-        $this->positions[$symbol] = [
-            'quantity' => $remainingQuantity,
-            'cost' => $remainingCost,
-            'current_value' => $currentValue,
-            'profit_loss' => $profitLoss,
-            'profit_loss_pct' => (($profitLoss) / $remainingCost) * 100,
-            'total_sell_fees' => $position['total_sell_fees'] + $fees,
-        ] + $this->positions[$symbol];
+        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->partialExit($quantityToSell, $fees);
 
         $this->save();
 
-        $this->logger->info("Sortie partielle réussie pour {$symbol}: {$quantityToSell} vendus au prix de {$currentPrice}");
+        $this->logger->info("Sortie partielle réussie pour {$symbol}: {$quantityToSell} vendus au prix de {$this->positions[$symbol]->current_price}");
 
         return $this->positions[$symbol];
     }
 
-    public function buy(string $symbol, float $currentPrice, float $quantity, float $cost, int $orderId, float $fees): array
+    public function buy(string $symbol, float $currentPrice, float $quantity, float $cost, int $orderId, float $fees): Position
     {
         $this->load();
 
-        $this->positions[$symbol] = [
-            'symbol' => $symbol,
-            'entry_price' => $currentPrice,
-            'quantity' => $quantity,
-            'timestamp' => $this->clock->now()->getTimestamp() * 1000,
-            'cost' => $cost,
-            'current_price' => $currentPrice,
-            'current_value' => $quantity * $currentPrice,
-            'profit_loss' => 0,
-            'profit_loss_pct' => 0,
-            'total_buy_fees' => $fees,
-            'total_sell_fees' => 0,
-            'order_id' => $orderId
-        ];
+        $this->positions[$symbol] = (new Position(
+            $symbol,
+            $currentPrice,
+            $quantity,
+            $this->clock->now()->getTimestamp() * 1000,
+            $cost,
+            $currentPrice,
+            $quantity * $currentPrice,
+            0,
+            0,
+            $fees,
+            0,
+            $orderId
+        ));
 
         $this->save();
 
@@ -160,7 +134,11 @@ class PositionList
     {
         $this->load();
 
-        file_put_contents($this->positionsFile, json_encode($this->positions, JSON_PRETTY_PRINT));
+        $positions = [];
+        foreach ($this->positions as $symbol => $position) {
+            $positions[$symbol] = $position->toArray();
+        }
+        file_put_contents($this->positionsFile, json_encode($positions, JSON_PRETTY_PRINT));
     }
 
     public function iterateSymbols(): \Generator
@@ -176,18 +154,11 @@ class PositionList
     {
         $this->load();
 
-        $positionObject = $this->getPositionForSymbol($symbol);
-        // Mettre à jour la position avec le prix actuel
-        $position['current_price'] = $currentPrice;
-        $position['current_value'] = $positionObject->quantity * $currentPrice;
-        $position['profit_loss'] = $positionObject->current_value - $positionObject->cost;
-        $position['profit_loss_pct'] = ($positionObject->profit_loss / $positionObject->cost) * 100;
-
-        $this->positions[$symbol] = $position;
+        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->update($currentPrice);
 
         $this->save();
 
-        return Position::fromArray($position);
+        return $this->positions[$symbol];
     }
 
     public function isStopLossTriggered(string $symbol, float $stopLossPercentage): bool

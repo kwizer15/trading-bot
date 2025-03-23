@@ -7,7 +7,6 @@ use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\Balance;
 use Kwizer15\TradingBot\DTO\KlineHistory;
-use Kwizer15\TradingBot\DTO\Position;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
 use Kwizer15\TradingBot\TradingBot;
 use Kwizer15\TradingBot\Utils\ConsoleLogger;
@@ -41,18 +40,21 @@ class BacktestEngine
         // Parcourir les données historiques
         $countData = $this->history->count();
         $tradeList = [];
+//        $cyclesTimes = [];
         for ($i = max($this->strategy->getParameter('long_period', 0), $this->strategy->getParameter('period', 0)) + 1; $i < $countData; $i++) {
+//            $cycleTime = microtime(true);
             $currentData = $this->history->slice($i + 1);
             $kline = $currentData->last();
             $tradingBot = $this->buildTradingBot($currentData);
 
             $tradingBot->run();
 
+            $positions = $tradingBot->getPositions();
             $tradeList[] = $tradingBot->getTrades();
             // Enregistrer l'équité à chaque étape
             $totalEquity = $this->balance->free;
-            foreach ($tradingBot->getPositions()->iterateSymbols() as $symbol) {
-                $positionObject = $tradingBot->getPositions()->getPositionForSymbol($symbol);
+            foreach ($positions->iterateSymbols() as $symbol) {
+                $positionObject = $positions->getPositionForSymbol($symbol);
                 $totalEquity += $positionObject->current_value;
             }
 
@@ -60,7 +62,10 @@ class BacktestEngine
                 'timestamp' => $kline->closeTime,
                 'equity' => $totalEquity
             ];
+//            $cyclesTimes[] = microtime(true) - $cycleTime;
         }
+
+//        var_dump(max(...$cyclesTimes), min(...$cyclesTimes));
 
         $trades = array_merge(...$tradeList);
         $tradingBot = $this->buildTradingBot($this->history);

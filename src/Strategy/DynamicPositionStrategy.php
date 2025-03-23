@@ -177,7 +177,7 @@ final class DynamicPositionStrategy implements PositionActionStrategyInterface
         $this->updateStopLoss($symbol);
         $this->savePositionData();
 
-        echo 'Nouvelle position : ' . $symbol . ' - Quantité : ' . $position['quantity'] . ' - Prix d\'entrée : ' . $entryPrice . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
+        echo 'Nouvelle position : ' . $symbol . ' - Quantité : ' . $position->quantity . ' - Prix d\'entrée : ' . $entryPrice . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
     }
 
     /**

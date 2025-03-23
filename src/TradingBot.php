@@ -5,7 +5,6 @@ namespace Kwizer15\TradingBot;
 use Kwizer15\TradingBot\Clock\RealClock;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
-use Kwizer15\TradingBot\DTO\Position;
 use Kwizer15\TradingBot\DTO\PositionList;
 use Kwizer15\TradingBot\Strategy\PositionAction;
 use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
@@ -81,8 +80,7 @@ class TradingBot
             $additionalQuantity = $additionalInvestment / $currentPrice;
             $order = $this->binanceAPI->buyMarket($symbol, $additionalQuantity);
 
-            $position = $this->positionList->increasePosition($symbol, $order);
-            $positionObject = Position::fromArray($position);
+            $positionObject = $this->positionList->increasePosition($symbol, $order);
             $this->strategy->onIncreasePosition($positionObject, $order);
             $this->logger->notice("Position {$symbol} augmentée de {$additionalQuantity} {$symbol}");
         } catch (\Exception $e) {
@@ -128,8 +126,7 @@ class TradingBot
             // Exécuter l'ordre de vente partielle
             $order = $this->binanceAPI->sellMarket($symbol, $quantityToSell);
 
-            $position = $this->positionList->partialExit($symbol, $order->quantity, $order->fee);
-            $positionObject = Position::fromArray($position);
+            $positionObject = $this->positionList->partialExit($symbol, $order->quantity, $order->fee);
             $this->strategy->onPartialExit($positionObject, $order);
             $this->logger->notice("Sortie partielle de {$symbol} de {$order->quantity} {$symbol}");
         } catch (\Exception $e) {
@@ -299,7 +296,7 @@ class TradingBot
                 $order->orderId,
                 $order->fee,
             );
-            $this->strategy->onBuy(Position::fromArray($position));
+            $this->strategy->onBuy($position);
         } catch (\Exception $e) {
             $this->logger->error("Erreur lors de l'achat de {$symbol}: " . $e->getMessage());
         }
