@@ -4,7 +4,7 @@ namespace Kwizer15\TradingBot\Backtest;
 
 use Kwizer15\TradingBot\BinanceAPI;
 
-class DataLoader {
+final class DataLoader {
     private $binanceAPI;
 
     public function __construct(BinanceAPI $binanceAPI) {
@@ -60,7 +60,7 @@ class DataLoader {
 
                 // Petite pause pour ne pas dépasser les limites de l'API
                 usleep(300000); // 300ms
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 echo "Erreur lors de la récupération des données: " . $e->getMessage() . "\n";
                 // Attendre un peu plus longtemps en cas d'erreur
                 sleep(2);
@@ -141,7 +141,7 @@ class DataLoader {
             case 'M': // mois (approximatif)
                 return $value * 30 * 24 * 60 * 60 * 1000;
             default:
-                throw new Exception("Intervalle non reconnu: {$interval}");
+                throw new \Exception("Intervalle non reconnu: {$interval}");
         }
     }
 }

@@ -11,7 +11,6 @@ final class StrategyFactory
             'RSIStrategy' => new RSIStrategy(),
             'MovingAverageStrategy' => new MovingAverageStrategy(),
             'DynamicPositionStrategy' => new DynamicPositionStrategy($backtest),
-            'InvestStrategy' => new InvestStrategy(),
             default => throw new \Exception('Stratégie non supportée'),
         };
 
