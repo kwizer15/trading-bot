@@ -51,7 +51,8 @@ class BacktestEngine
             $tradeList[] = $tradingBot->getTrades();
             // Enregistrer l'équité à chaque étape
             $totalEquity = $this->balance->free;
-            foreach ($this->positions as $position) {
+            foreach ($tradingBot->getPositions()->iterateSymbols() as $symbol) {
+                $position = $tradingBot->getPositions()->getPositionForSymbol($symbol);
                 $totalEquity += $position['current_value'];
             }
 
@@ -63,7 +64,7 @@ class BacktestEngine
 
         $trades = array_merge(...$tradeList);
         $tradingBot = $this->buildTradingBot($this->history);
-        foreach ($this->positions as $symbol => $position) {
+        foreach ($tradingBot->getPositions()->iterateSymbols() as $symbol) {
             $tradingBot->closePosition($symbol);
         }
 

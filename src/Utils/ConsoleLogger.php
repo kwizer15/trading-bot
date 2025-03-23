@@ -29,6 +29,7 @@ final class ConsoleLogger implements LoggerInterface
 
     public function log($level, string|\Stringable $message, array $context = []): void
     {
+        return;
         if (self::LEVELS[$level] < $this->logLevel) {
             return;
         }

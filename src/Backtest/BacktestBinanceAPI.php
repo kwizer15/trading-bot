@@ -7,12 +7,12 @@ use Kwizer15\TradingBot\DTO\Balance;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\DTO\Order;
 
-final class BacktestBinanceAPI implements BinanceAPIInterface
+final readonly class BacktestBinanceAPI implements BinanceAPIInterface
 {
     public function __construct(
-        private readonly KlineHistory $klineHistory,
+        private KlineHistory $klineHistory,
         private Balance $balance,
-        private readonly float $fees = 0.1,
+        private float $fees = 0.1,
     ) {
 
     }
@@ -31,9 +31,12 @@ final class BacktestBinanceAPI implements BinanceAPIInterface
     {
         $price = $this->getCurrentPrice($symbol);
         $buyValue = $quantity * $price;
+        if ($buyValue < 5) {
+            throw new \Exception('Minimum order value is 5');
+        }
         $fee = ($buyValue * $this->fees) / 100;
 
-        $this->balance = $this->balance->sub($buyValue - $fee);
+        $this->balance->sub($buyValue - $fee);
 
         return new Order(random_int(0, PHP_INT_MAX), $price, $quantity, $fee, $this->klineHistory->last()->closeTime);
     }
@@ -42,9 +45,12 @@ final class BacktestBinanceAPI implements BinanceAPIInterface
     {
         $price = $this->getCurrentPrice($symbol);
         $saleValue = $quantity * $price;
+        if ($saleValue < 5) {
+            throw new \Exception('Minimum order value is 5');
+        }
         $fee = ($saleValue * $this->fees) / 100;
 
-        $this->balance = $this->balance->add($saleValue - $fee);
+        $this->balance->add($saleValue - $fee);
 
         return new Order(random_int(0, PHP_INT_MAX), $price, $quantity, $fee, $this->klineHistory->last()->closeTime);
     }

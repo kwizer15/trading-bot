@@ -55,4 +55,6 @@ interface StrategyInterface {
 
     public function onSell(string $symbol, float $currentPrice): void;
     public function onBuy(array $position): void;
+
+    public function getInvestment(string $symbol, float $currentPrice): ?float;
 }

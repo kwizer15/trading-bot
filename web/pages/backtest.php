@@ -53,7 +53,7 @@
 
                                                 foreach ($symbols as $symbol) {
                                                     $pair = $symbol . $base;
-                                                    echo "<option value=\"{$pair}\">{$pair}</option>";
+                                                    echo "<option value=\"{$symbol}\">{$pair}</option>";
                                                 }
                                                 ?>
                                             </select>

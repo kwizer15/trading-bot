@@ -105,6 +105,7 @@ class PositionList
             'current_value' => $currentValue,
             'profit_loss' => $profitLoss,
             'profit_loss_pct' => (($profitLoss) / $remainingCost) * 100,
+            'total_sell_fees' => $position['total_sell_fees'] + $fees,
         ] + $this->positions[$symbol];
 
         $this->save();
@@ -129,6 +130,7 @@ class PositionList
             'profit_loss' => 0,
             'profit_loss_pct' => 0,
             'total_buy_fees' => $fees,
+            'total_sell_fees' => 0,
             'order_id' => $orderId
         ];
 

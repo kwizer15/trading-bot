@@ -30,6 +30,10 @@ class TradingBot {
         $this->positionList = new PositionList($this->positionsFile, $this->logger, $this->clock);
     }
 
+    public function getPositions(): PositionList
+    {
+        return $this->positionList;
+    }
     /**
      * Lance le bot de trading
      */
@@ -71,6 +75,7 @@ class TradingBot {
 
             $position = $this->positionList->increasePosition($symbol, $order);
             $this->strategy->onIncreasePosition($position, $order);
+            $this->logger->notice("Position {$symbol} augmentée de {$additionalQuantity} {$symbol}");
         } catch (\Exception $e) {
             $this->logger->error( "Erreur lors de l'augmentation de la position {$symbol}: " . $e->getMessage());
         }
@@ -110,7 +115,8 @@ class TradingBot {
             $order = $this->binanceAPI->sellMarket($symbol, $quantityToSell);
 
             $position = $this->positionList->partialExit($symbol, $order->quantity, $order->fee);
-            $this->strategy->onPartialExit($position, $order->quantity);
+            $this->strategy->onPartialExit($position, $order);
+            $this->logger->notice("Sortie partielle de {$symbol} de {$order->quantity} {$symbol}");
         } catch (\Exception $e) {
             $this->logger->error( "Erreur lors de la sortie partielle de {$symbol}: " . $e->getMessage());
         }
@@ -227,16 +233,15 @@ class TradingBot {
             if ($this->positionList->hasPositionForSymbol($pairSymbol)) {
                 continue;
             }
-
             try {
                 // Obtenir les données récentes du marché
                 $klines = $this->binanceAPI->getKlines($pairSymbol, '1h', 100);
                 $history = KlineHistory::create($pairSymbol, $klines);
 
                 // Vérifier le signal d'achat
-                if ($this->strategy->shouldBuy($history, $symbol)) {
+                if ($this->strategy->shouldBuy($history, $pairSymbol)) {
                     $this->logger->notice( "Signal d'achat détecté pour {$pairSymbol}");
-                    $this->buy($pairSymbol);
+                    $this->buy($pairSymbol, $this->strategy->getInvestment($pairSymbol, $history->last()->close));
 
                     // Si nous avons atteint le nombre maximum de positions après cet achat, on arrête
                     if ($this->positionList->count() >= $this->tradingConfiguration->maxOpenPositions) {
@@ -252,12 +257,12 @@ class TradingBot {
     /**
      * Exécute un achat
      */
-    private function buy($symbol): void {
+    private function buy(string $symbol, float $investment = null): void {
         try {
             // Vérifier le solde disponible
             $balance = $this->binanceAPI->getBalance($this->tradingConfiguration->baseCurrency);
 
-            $cost = $this->tradingConfiguration->investmentPerTrade;
+            $cost = $investment ?? $this->tradingConfiguration->investmentPerTrade;
             if ($balance->free < $cost) {
                 $this->logger->warning("Solde insuffisant pour acheter {$symbol}");
                 return;
@@ -303,7 +308,7 @@ class TradingBot {
 
             $position = $this->positionList->getPositionForSymbol($symbol);
             $saleValue = $order->price * $order->quantity;
-            $totalFee = $order->fee + ($position['total_buy_fees'] / $order->quantity);
+            $totalFee = $order->fee + $position['total_buy_fees'] + $position['total_sell_fees'];
             $profit = $saleValue - $position['cost'] - $totalFee;
             $profitPct = ($profit / $position['cost']) * 100;
 

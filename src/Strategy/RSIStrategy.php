@@ -4,7 +4,7 @@ namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 
-class RSIStrategy implements StrategyInterface {
+final class RSIStrategy implements StrategyInterface {
     private $params = [
         'period' => 14,           // Période pour le calcul du RSI
         'overbought' => 70,       // Niveau de surachat
@@ -144,5 +144,10 @@ class RSIStrategy implements StrategyInterface {
 
     public function onBuy(array $position): void
     {
+    }
+
+    public function getInvestment(string $symbol, float $currentPrice): ?float
+    {
+        return null;
     }
 }

@@ -4,7 +4,7 @@ namespace Kwizer15\TradingBot\Strategy;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 
-class MovingAverageStrategy implements StrategyInterface {
+final class MovingAverageStrategy implements StrategyInterface {
     private $params = [
         'short_period' => 9,   // Période courte (en bougies)
         'long_period' => 21,   // Période longue (en bougies)
@@ -132,5 +132,10 @@ class MovingAverageStrategy implements StrategyInterface {
 
     public function onBuy(array $position): void
     {
+    }
+
+    public function getInvestment(string $symbol, float $currentPrice): ?float
+    {
+        return null;
     }
 }

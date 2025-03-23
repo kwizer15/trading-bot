@@ -7,20 +7,18 @@ use Kwizer15\TradingBot\DTO\Order;
 
 class DynamicPositionStrategy implements PositionActionStrategyInterface {
     // Paramètres par défaut de la stratégie
-    private $params = [
-        'initial_stop_loss_pct' => 5.0,      // Stop loss initial en pourcentage
+    private array $params = [
+        'initial_stop_loss_pct' => 20.0,      // Stop loss initial en pourcentage
         'analysis_period' => 24,             // Période d'analyse en heures
         'partial_take_profit' => true,       // Activer la prise de profit partielle
-        'position_increase_pct' => 5.0,      // Pourcentage d'augmentation de position si baisse
-        'max_investment_multiplier' => 2.0,  // Multiplicateur max de l'investissement initial
-        'partial_exit_pct' => 30.0,          // Pourcentage de la position à sortir lors d'un profit
-//        'entry_indicators' => [              // Indicateurs pour l'entrée (option)
-//            'rsi_period' => 14,
-//            'rsi_oversold' => 40, // 30
-//            'macd_fast' => 12,
-//            'macd_slow' => 26,
-//            'macd_signal' => 9
-//        ]
+        'max_investment_multiplier' => 20.0,  // Multiplicateur max de l'investissement initial
+        'entry_indicators' => [              // Indicateurs pour l'entrée (option)
+            'rsi_period' => 14,
+            'rsi_oversold' => 40,
+            'macd_fast' => 12,
+            'macd_slow' => 26,
+            'macd_signal' => 9
+        ]
     ];
 
     // Stockage des positions avec leurs données
@@ -33,15 +31,15 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
     /**
      * Analyse les données du marché et détermine si un signal d'achat est présent
      */
-    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool {
+    public function shouldBuy(KlineHistory $history, string $pairSymbol): bool {
         // Vérifier si nous avons déjà eu une position sur ce symbole qui a été stoppée
-        if (isset($this->positionData[$currentSymbol]) &&
-            $this->positionData[$currentSymbol]['exit_reason'] === 'stop_loss' &&
-            $this->positionData[$currentSymbol]['last_exit_price'] > 0) {
+        if (isset($this->positionData[$pairSymbol]) &&
+            $this->positionData[$pairSymbol]['exit_reason'] === 'stop_loss' &&
+            $this->positionData[$pairSymbol]['last_exit_price'] > 0) {
 
             // Obtenir le prix actuel
             $currentPrice = $history->last()->close;
-            $lastExitPrice = $this->positionData[$currentSymbol]['last_exit_price'];
+            $lastExitPrice = $this->positionData[$pairSymbol]['last_exit_price']; // * (1 - ($this->params['initial_stop_loss_pct'] / 100));
 
             // Vérifier si le prix est inférieur au prix de sortie (condition de réentrée)
             if ($currentPrice >= $lastExitPrice) {
@@ -105,45 +103,42 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
             $this->positionData[$symbol]['last_analysis_time'] = $currentTime;
 
             // Récupérer le prix d'entrée moyen et le prix actuel
-            $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['total_quantity']);
+            $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity']);
 
             // Calculer la performance actuelle
             $performancePct = (($currentPrice - $entryPrice) / $entryPrice) * 100;
 
-            if ($performancePct > 0) {
-                // Le prix a augmenté, envisager une sortie partielle
-                if ($this->params['partial_take_profit']) {
-                    $initialInvestment = $this->positionData[$symbol]['initial_investment'];
-                    $currentValue = $position['current_value'];
+            if ($performancePct > 0 && $this->params['partial_take_profit']) {
+//                    $initialInvestment = $this->positionData[$symbol]['initial_investment'];
+//                    $currentValue = $position['current_value'];
 
-                    // Calculer le profit en montant
-                    $profit = $currentValue - $initialInvestment;
+//                     Calculer le profit en montant
+//                    $profit = $currentValue - $initialInvestment;
 
-                    if ($profit > 0) {
+//                    if ($profit > 0) {
                         $this->savePositionData();
 
                         return PositionAction::PARTIAL_EXIT;
-                    }
-                }
-            } else {
-                // Le prix a baissé, envisager d'augmenter la position
-                $decreasePct = abs($performancePct);
-
-                // Vérifier si la baisse justifie une augmentation de position
-                if ($decreasePct >= $this->params['position_increase_pct']) {
-                    // Calculer le multiplicateur actuel
-                    $initialInvestment = $this->positionData[$symbol]['initial_investment'];
-                    $currentInvestment = $this->positionData[$symbol]['total_investment'];
-                    $currentMultiplier = $currentInvestment / $initialInvestment;
-
-                    // Vérifier si nous pouvons encore augmenter la position
-                    if ($currentMultiplier < $this->params['max_investment_multiplier']) {
-                        $this->savePositionData();
-
-                        return PositionAction::INCREASE_POSITION;
-                    }
-                }
+//                    }
             }
+
+// Le prix a baissé, envisager d'augmenter la position
+            $decreasePct = abs($performancePct);
+
+            // Vérifier si la baisse justifie une augmentation de position
+//                if ($decreasePct >= $this->params['position_increase_pct']) {
+            // Calculer le multiplicateur actuel
+            $initialInvestment = $this->positionData[$symbol]['initial_investment'];
+            $currentInvestment = $this->positionData[$symbol]['total_investment'];
+            $currentMultiplier = $currentInvestment / $initialInvestment;
+
+            // Vérifier si nous pouvons encore augmenter la position
+            if ($currentMultiplier < $this->params['max_investment_multiplier']) {
+                $this->savePositionData();
+
+                return PositionAction::INCREASE_POSITION;
+            }
+//                }
 
             // Sauvegarder les données de position
             $this->savePositionData();
@@ -156,8 +151,9 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
     /**
      * Met à jour le stop loss en fonction de la position actuelle
      */
-    private function updateStopLoss(string $symbol, array $position, float $avgEntryPrice): void {
+    private function updateStopLoss(string $symbol): void {
         // Calculer le nouveau stop loss
+        $avgEntryPrice = $this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity'];
         $stopLossPct = $this->params['initial_stop_loss_pct'];
         $stopLossPrice = $avgEntryPrice * (1 - ($stopLossPct / 100));
 
@@ -172,7 +168,6 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
         $symbol = $position['symbol'];
         $entryPrice = $position['entry_price'];
         $initialInvestment = $position['cost'];
-
         $this->positionData[$symbol] = [
             'symbol' => $symbol,
             'initial_entry_price' => $entryPrice,
@@ -191,7 +186,10 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
             'exit_reason' => ''
         ];
 
+        $this->updateStopLoss($symbol);
         $this->savePositionData();
+
+        echo 'Nouvelle position : ' . $symbol . ' - Quantité : ' . $position['quantity'] . ' - Prix d\'entrée : ' . $entryPrice . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
     }
 
     /**
@@ -266,7 +264,6 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
 
         // Vérifier la condition de surachat
         if ($rsiValue <= $this->params['entry_indicators']['rsi_oversold']) {
-            return true;
             // Calculer le MACD
             $fastPeriod = $this->params['entry_indicators']['macd_fast'];
             $slowPeriod = $this->params['entry_indicators']['macd_slow'];
@@ -347,7 +344,7 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
     private function calculateMACD(KlineHistory $history, int $fastPeriod, int $slowPeriod, int $signalPeriod): array {
         // Extraire les prix de clôture
         $count = $history->count();
-        $closes = array_column($history->getData(), 'close');
+        $closes = $history->listCloses();
 
         // Calculer les EMA
         $fastEMA = $this->calculateEMA($closes, $fastPeriod);
@@ -462,14 +459,15 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
         return (($equity - $investment) / $investment) * 100;
     }
 
-    public function onPartialExit(array $position, float $sellQuantity): void
+    public function onPartialExit(array $position, Order $order): void
     {
         $symbol = $position['symbol'];
 
-        $this->positionData[$symbol]['quantity'] -= $sellQuantity;
-        $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity']);
-        $this->updateStopLoss($symbol, $position, $entryPrice);
+        $this->positionData[$symbol]['quantity'] -= $order->quantity;
+//        $this->positionData[$symbol]['total_investment'] -= $order->quantity * $order->price;
+        $this->updateStopLoss($symbol);
         $this->savePositionData();
+        echo 'Sortie partielle de la position : ' . $symbol . ' - Quantité : ' . $order->quantity . ' - Prix : ' . $order->price . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
     }
 
     public function onIncreasePosition(array $position, Order $order): void
@@ -478,10 +476,10 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
 
         $this->positionData[$symbol]['total_investment'] += $order->quantity * $order->price;
         $this->positionData[$symbol]['quantity'] += $order->quantity;
-        $entryPrice = ($this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity']);
 
-        $this->updateStopLoss($symbol, $position, $entryPrice);
+        $this->updateStopLoss($symbol);
         $this->savePositionData();
+        echo 'Augmentation de la position : ' . $symbol . ' - Quantité : ' . $order->quantity . ' - Prix : ' . $order->price . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
     }
 
     public function onSell(string $symbol, float $currentPrice): void
@@ -493,6 +491,9 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
                 $this->positionData[$symbol]['exit_reason'] = 'stop_loss';
                 break;
         }
+
+        $this->savePositionData();
+        echo 'Sortie de la position : ' . $symbol . ' - Prix : ' . $currentPrice . ' - Raison : ' . $this->positionData[$symbol]['exit_reason'] . PHP_EOL;
     }
 
     /**
@@ -501,5 +502,14 @@ class DynamicPositionStrategy implements PositionActionStrategyInterface {
     public function getPositionDataFile(): string
     {
         return dirname(__DIR__, 2) . '/data/strategy_position_data.json';
+    }
+
+    public function getInvestment(string $symbol, float $currentPrice): ?float
+    {
+        if (!isset($this->positionData[$symbol])) {
+            return null;
+        }
+
+        return $currentPrice * $this->positionData[$symbol]['quantity'];
     }
 }

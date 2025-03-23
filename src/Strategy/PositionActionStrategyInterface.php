@@ -10,7 +10,7 @@ interface PositionActionStrategyInterface extends StrategyInterface
     /**
      * Détermine l'action à effectuer sur une position
      *
-     * @param array $marketData Données du marché (klines)
+     * @param KlineHistory $marketData Données du marché (klines)
      * @param array $position Informations sur la position ouverte
      *
      * @return PositionAction Action à effectuer
@@ -23,6 +23,6 @@ interface PositionActionStrategyInterface extends StrategyInterface
 
     public function onIncreasePosition(array $position, Order $order): void;
 
-    public function onPartialExit(array $position, float $sellQuantity): void;
+    public function onPartialExit(array $position, Order $order): void;
 
 }
