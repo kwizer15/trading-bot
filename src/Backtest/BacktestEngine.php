@@ -34,15 +34,16 @@ class BacktestEngine
 
         $this->equity[] = [
             'timestamp' => $this->history->first()->openTime, // Timestamp de la première bougie
-            'equity' => $this->balance->free
+            'equity' => $this->balance->free,
+            'balance' => $this->balance->free,
+            'price' => $this->history->first()->open,
         ];
 
         // Parcourir les données historiques
         $countData = $this->history->count();
-        $tradeList = [];
-//        $cyclesTimes = [];
-        for ($i = max($this->strategy->getParameter('long_period', 0), $this->strategy->getParameter('period', 0)) + 1; $i < $countData; $i++) {
-//            $cycleTime = microtime(true);
+        //        $cyclesTimes = [];
+        for ($i = $this->strategy->getMinimumKlines() + 1; $i < $countData; $i++) {
+            //            $cycleTime = microtime(true);
             $currentData = $this->history->slice($i + 1);
             $kline = $currentData->last();
             $tradingBot = $this->buildTradingBot($currentData);
@@ -50,7 +51,6 @@ class BacktestEngine
             $tradingBot->run();
 
             $positions = $tradingBot->getPositions();
-            $tradeList[] = $tradingBot->getTrades();
             // Enregistrer l'équité à chaque étape
             $totalEquity = $this->balance->free;
             foreach ($positions->iterateSymbols() as $symbol) {
@@ -60,19 +60,21 @@ class BacktestEngine
 
             $this->equity[] = [
                 'timestamp' => $kline->closeTime,
-                'equity' => $totalEquity
+                'equity' => $totalEquity,
+                'balance' => $this->balance->free,
+                'price' => $this->history->first()->close,
             ];
-//            $cyclesTimes[] = microtime(true) - $cycleTime;
+            //            $cyclesTimes[] = microtime(true) - $cycleTime;
         }
 
-//        var_dump(max(...$cyclesTimes), min(...$cyclesTimes));
+        //        var_dump(max(...$cyclesTimes), min(...$cyclesTimes));
 
-        $trades = array_merge(...$tradeList);
         $tradingBot = $this->buildTradingBot($this->history);
         foreach ($tradingBot->getPositions()->iterateSymbols() as $symbol) {
             $tradingBot->closePosition($symbol);
         }
 
+        $trades = $tradingBot->getTrades();
         $endTime = microtime(true);
         $duration = $endTime - $startTime;
 
@@ -135,6 +137,7 @@ class BacktestEngine
         }
 
         unlink($this->getPositionFile());
+        unlink($this->getTradeFile());
 
         // Résultats du backtest
         return [
@@ -174,6 +177,7 @@ class BacktestEngine
             $this->tradingConfiguration,
             new ConsoleLogger($clock, 'notice'),
             $this->getPositionFile(),
+            $this->getTradeFile(),
             $clock,
         );
     }
@@ -184,6 +188,11 @@ class BacktestEngine
     private function getPositionFile(): string
     {
         return dirname(__DIR__, 2) . '/data/backtest_positions.json';
+    }
+
+    private function getTradeFile(): string
+    {
+        return dirname(__DIR__, 2) . '/data/backtest_trades.json';
     }
 
 }

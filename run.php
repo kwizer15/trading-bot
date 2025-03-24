@@ -69,6 +69,7 @@ $tradingBot = new TradingBot(
     new TradingConfiguration($config),
     $logger,
     __DIR__ . '/data/positions.json',
+    __DIR__ . '/data/trades.json',
     $clock,
 );
 

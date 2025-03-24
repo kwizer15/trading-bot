@@ -168,7 +168,7 @@ $paramHash = substr(md5(uniqid('', true)), 0, 8);
 $resultFileName .= "_" . $paramHash;
 $resultsFile = __DIR__ . '/data/results_' .  $resultFileName . '.json';
 
-file_put_contents($resultsFile, json_encode($results, JSON_PRETTY_PRINT));
+file_put_contents($resultsFile, json_encode($results));
 
 echo "Résultats détaillés sauvegardés dans {$resultsFile}\n";
 

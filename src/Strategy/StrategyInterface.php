@@ -5,7 +5,7 @@ namespace Kwizer15\TradingBot\Strategy;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\DTO\Position;
 
-interface StrategyInterface
+interface StrategyInterface extends BacktestableInterface
 {
     /**
      * Analyse les données du marché et détermine si un signal d'achat est présent
@@ -58,4 +58,5 @@ interface StrategyInterface
     public function onBuy(Position $position): void;
 
     public function getInvestment(string $symbol, float $currentPrice): ?float;
+
 }

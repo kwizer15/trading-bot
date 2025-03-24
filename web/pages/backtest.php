@@ -702,17 +702,20 @@
                     if (data.equity_curve && data.equity_curve.length > 0) {
                         const labels = [];
                         const equityData = [];
+                        const balanceData = [];
 
                         data.equity_curve.forEach(point => {
                             // S'assurer que les timestamps sont traités comme des nombres
                             const timestamp = typeof point.timestamp === 'string' ? parseInt(point.timestamp) : point.timestamp;
                             labels.push(new Date(timestamp).toLocaleDateString());
                             equityData.push(parseFloat(point.equity));
+                            balanceData.push(parseFloat(point.balance));
                         });
 
                         backtestData = {
                             labels: labels,
-                            equity: equityData
+                            equity: equityData,
+                            balance: balanceData
                         };
 
                         // Initialiser le graphique
@@ -731,6 +734,13 @@
                                     data: backtestData.equity,
                                     borderColor: 'rgb(75, 192, 192)',
                                     backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                                    tension: 0.1,
+                                    fill: true
+                                },{
+                                    label: 'Balance',
+                                    data: backtestData.balance,
+                                    borderColor: 'rgb(192, 75, 192)',
+                                    backgroundColor: 'rgba(192, 75, 192, 0.1)',
                                     tension: 0.1,
                                     fill: true
                                 }]

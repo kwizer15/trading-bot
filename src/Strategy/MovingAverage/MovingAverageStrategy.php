@@ -1,9 +1,10 @@
 <?php
 
-namespace Kwizer15\TradingBot\Strategy;
+namespace Kwizer15\TradingBot\Strategy\MovingAverage;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\DTO\Position;
+use Kwizer15\TradingBot\Strategy\StrategyInterface;
 
 final class MovingAverageStrategy implements StrategyInterface
 {
@@ -147,5 +148,10 @@ final class MovingAverageStrategy implements StrategyInterface
     public function getInvestment(string $symbol, float $currentPrice): ?float
     {
         return null;
+    }
+
+    public function getMinimumKlines(): int
+    {
+        return $this->params['long_period'];
     }
 }

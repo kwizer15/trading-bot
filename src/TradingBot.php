@@ -17,7 +17,7 @@ class TradingBot
     private PositionList $positionList;
     private ClockInterface $clock;
 
-    private array $trades = [];
+    private array $trades;
 
     public function __construct(
         private readonly BinanceAPIInterface $binanceAPI,
@@ -25,10 +25,17 @@ class TradingBot
         private readonly TradingConfiguration $tradingConfiguration,
         private readonly LoggerInterface $logger,
         private readonly ?string $positionsFile = null,
+        private readonly ?string $tradesFile = null,
         ?ClockInterface $clock = null
     ) {
         $this->clock = $clock ?? new RealClock();
         $this->positionList = new PositionList($this->positionsFile, $this->logger, $this->clock);
+        if (!is_readable($this->tradesFile)) {
+            $this->trades = [];
+        } else {
+            $tradeList = file_get_contents($this->tradesFile);
+            $this->trades = $tradeList ? json_decode($tradeList, true) : [];
+        }
     }
 
     public function getPositions(): PositionList
@@ -345,6 +352,8 @@ class TradingBot
                 'duration' => ($order->timestamp - $positionObject->timestamp) / (60 * 60 * 1000) // Durée en heures
             ];
 
+            file_put_contents($this->tradesFile, json_encode($this->trades, JSON_PRETTY_PRINT));
+
             $this->positionList->sell($symbol);
             $this->strategy->onSell($symbol, $order->price);
 
@@ -360,4 +369,5 @@ class TradingBot
     {
         return $this->trades;
     }
+
 }

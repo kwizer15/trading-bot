@@ -2,6 +2,10 @@
 
 namespace Kwizer15\TradingBot\Strategy;
 
+use Kwizer15\TradingBot\Strategy\DynamicPosition\DynamicPositionStrategy;
+use Kwizer15\TradingBot\Strategy\MovingAverage\MovingAverageStrategy;
+use Kwizer15\TradingBot\Strategy\RSI\RSIStrategy;
+
 final class StrategyFactory
 {
     public function create(string $strategyName, array $params, bool $backtest = false): StrategyInterface
@@ -11,7 +15,7 @@ final class StrategyFactory
             'RSI',
             'RSIStrategy' => new RSIStrategy(),
             'MovingAverageStrategy' => new MovingAverageStrategy(),
-            'DynamicPositionStrategy' => new DynamicPositionStrategy($backtest),
+            'DynamicPositionStrategy' => new DynamicPositionStrategy(isBacktest: $backtest),
             default => throw new \Exception('Stratégie non supportée'),
         };
 

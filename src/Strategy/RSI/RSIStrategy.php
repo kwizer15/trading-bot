@@ -1,9 +1,10 @@
 <?php
 
-namespace Kwizer15\TradingBot\Strategy;
+namespace Kwizer15\TradingBot\Strategy\RSI;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\DTO\Position;
+use Kwizer15\TradingBot\Strategy\StrategyInterface;
 
 final class RSIStrategy implements StrategyInterface
 {
@@ -159,5 +160,10 @@ final class RSIStrategy implements StrategyInterface
     public function getInvestment(string $symbol, float $currentPrice): ?float
     {
         return null;
+    }
+
+    public function getMinimumKlines(): int
+    {
+        return $this->params['period'];
     }
 }
