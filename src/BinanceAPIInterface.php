@@ -31,4 +31,11 @@ interface BinanceAPIInterface
      * Récupère le prix actuel d'un symbole
      */
     public function getCurrentPrice($symbol): float;
+
+    /**
+     * @param array<string> $symbols
+     *
+     * @return iterable<string, float>
+     */
+    public function getCurrentPrices(array $symbols): iterable;
 }

@@ -204,6 +204,7 @@
                                     <th>Symbole</th>
                                     <th>Prix d'entrée</th>
                                     <th>Prix actuel</th>
+                                    <th>Stop loss</th>
                                     <th>Quantité</th>
                                     <th>Valeur</th>
                                     <th>P/L</th>
@@ -220,8 +221,13 @@
                                                 <?php echo date('d/m/Y H:i', $position['timestamp'] / 1000); ?>
                                             </small>
                                         </td>
-                                        <td><?php echo format_number($position['entry_price'], 2); ?></td>
-                                        <td><?php echo format_number($position['current_price'], 2); ?></td>
+                                        <td><?php echo format_number($position['entry_price'], 6); ?></td>
+                                        <td><?php echo format_number($position['current_price'], 6); ?></td>
+                                        <td class="<?php echo get_value_class($position['stop_loss'] - $position['entry_price']); ?>">
+                                            <?php echo format_currency(($position['stop_loss'] - $position['entry_price']) * $position['quantity']); ?>
+                                            <br>
+                                            <small>(<?php echo format_number($position['stop_loss'], 6); ?>)</small>
+                                        </td>
                                         <td><?php echo format_number($position['quantity'], 5); ?></td>
                                         <td><?php echo format_currency($position['current_value']); ?></td>
                                         <td class="<?php echo get_value_class($position['profit_loss_pct']); ?>">
@@ -282,7 +288,7 @@
                                     ?>
                                     <tr>
                                         <td>
-                                            <?php echo date('d/m/Y H:i', $trade['exit_time'] / 1000); ?>
+                                            <?php echo date('d/m/Y H:i', (int) ($trade['exit_time'] / 1000)); ?>
                                             <br>
                                             <small class="text-muted">
                                                 Durée: <?php echo round($trade['duration'], 1); ?>h
@@ -296,9 +302,9 @@
                                                 <span class="badge bg-danger">PERTE</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td><?php echo format_number($trade['entry_price'], 2); ?></td>
-                                        <td><?php echo format_number($trade['exit_price'], 2); ?></td>
-                                        <td><?php echo format_number($trade['quantity'], 5); ?></td>
+                                        <td><?php echo format_number($trade['entry_price'], 8); ?></td>
+                                        <td><?php echo format_number($trade['exit_price'], 8); ?></td>
+                                        <td><?php echo format_number($trade['quantity'], 8); ?></td>
                                         <td class="<?php echo get_value_class($trade['profit']); ?>">
                                             <?php echo format_percent($trade['profit_pct']); ?>
                                             <br>

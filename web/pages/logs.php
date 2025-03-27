@@ -17,6 +17,7 @@
                 <ul class="dropdown-menu" aria-labelledby="logLevelDropdown">
                     <li><a class="dropdown-item log-level-filter active" href="#" data-level="all">Tous</a></li>
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="info">Info</a></li>
+                    <li><a class="dropdown-item log-level-filter" href="#" data-level="notice">Notice</a></li>
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="warning">Warning</a></li>
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="error">Error</a></li>
                     <li><a class="dropdown-item log-level-filter" href="#" data-level="debug">Debug</a></li>
@@ -48,7 +49,7 @@
     <div class="card">
         <div class="card-body log-container">
             <?php
-            $logs = get_logs();
+            $logs = get_logs(10000);
             $hasLog = false;
             foreach ($logs as $log): ?>
                 <?php $hasLog = true; ?>
@@ -56,8 +57,9 @@
                     <small class="text-muted">[<?php echo $log['timestamp']; ?>]</small>
                     <span class="badge bg-<?php
                     echo strtolower($log['level']) === 'info' ? 'primary' :
+                        (strtolower($log['level']) === 'notice' ? 'success' :
                         (strtolower($log['level']) === 'warning' ? 'warning' :
-                            (strtolower($log['level']) === 'error' ? 'danger' : 'secondary'));
+                            (strtolower($log['level']) === 'error' ? 'danger' : 'secondary')));
                     ?>">
                         <?php echo strtoupper($log['level']); ?>
                     </span>

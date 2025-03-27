@@ -147,19 +147,25 @@ class TradingBot
      */
     private function managePositions(): void
     {
+        $symbols = [];
         foreach ($this->positionList->iterateSymbols() as $symbol) {
-            $this->managePosition($symbol);
+            $symbols[] = $symbol;
+        }
+        $prices = $this->binanceAPI->getCurrentPrices($symbols);
+
+        foreach ($prices as $symbol => $currentPrice) {
+            $this->managePosition($symbol, $currentPrice);
         }
     }
 
-    private function managePosition(string $symbol): void
+    private function managePosition(string $symbol, float $currentPrice): void
     {
         $this->logger->info("Vérification de la position: {$symbol}");
 
         try {
             // Obtenir le prix actuel
-            $currentPrice = $this->binanceAPI->getCurrentPrice($symbol);
-            $positionObject = $this->positionList->updatePosition($symbol, $currentPrice);
+            //            $currentPrice = $this->binanceAPI->getCurrentPrice($symbol);
+            $positionObject = $this->positionList->updatePosition($symbol, $currentPrice, $this->strategy->calculateStopLoss($symbol, $currentPrice));
 
             // Vérifier le stop loss général
             if ($this->positionList->isStopLossTriggered($symbol, $this->tradingConfiguration->stopLossPercentage)) {
@@ -211,7 +217,7 @@ class TradingBot
             }
 
             // Utiliser l'approche classique shouldSell
-            if ($this->strategy->shouldSell($dtoKlines)) {
+            if ($this->strategy->shouldSell($dtoKlines, $positionObject)) {
                 $this->logger->info("Signal de vente détecté pour {$symbol}");
                 $this->sell($symbol);
                 return;
@@ -302,6 +308,7 @@ class TradingBot
                 $cost,
                 $order->orderId,
                 $order->fee,
+                $this->strategy->calculateStopLoss($symbol, $currentPrice)
             );
             $this->strategy->onBuy($position);
         } catch (\Exception $e) {
@@ -352,7 +359,13 @@ class TradingBot
                 'duration' => ($order->timestamp - $positionObject->timestamp) / (60 * 60 * 1000) // Durée en heures
             ];
 
-            file_put_contents($this->tradesFile, json_encode($this->trades, JSON_PRETTY_PRINT));
+            $encodedTrades = json_encode($this->trades, JSON_PRETTY_PRINT);
+            $writeFileSuccess = file_put_contents($this->tradesFile, $encodedTrades);
+            if (false === $writeFileSuccess) {
+                $this->logger->error("Impossible de sauvegarder les trades.");
+            } else {
+                $this->logger->info("Trades sauvegardées.");
+            }
 
             $this->positionList->sell($symbol);
             $this->strategy->onSell($symbol, $order->price);

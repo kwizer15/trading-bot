@@ -54,7 +54,7 @@ return [
         'partial_exit_pct' => 30.0,
         'entry_indicators' => [
             'rsi_period' => 14,
-            'rsi_oversold' => 30,
+            'rsi_oversold' => 40,
             'macd_fast' => 12,
             'macd_slow' => 26,
             'macd_signal' => 9

@@ -119,7 +119,7 @@ if (!file_exists($strategy_file)) {
 
 // 6. Créer un fichier d'historique de trades vide si nécessaire
 echo "Vérification de l'historique des trades...\n";
-$history_file = $bot_path . '/data/trade_history.json';
+$history_file = $bot_path . '/data/trades.json';
 
 if (!file_exists($history_file)) {
     file_put_contents($history_file, '[]');

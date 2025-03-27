@@ -5,12 +5,10 @@ namespace Kwizer15\TradingBot\Strategy\DynamicPosition;
 final readonly class DynamicPositionParameters
 {
     public function __construct(
-        public float $initial_stop_loss_pct = 10.0,     // Stop loss initial en pourcentage
+        public float $secure_stop_loss_pct = 10.0,        // Stop loss en pourcentage
         public float $profit_stop_loss_pct = 15.0,        // Stop loss en pourcentage
-        public float $rebuy_stop_loss_pct = 10.0,        // Stop loss en pourcentage
-        public int $analysis_period = 24,            // Période d'analyse en heures
-        public bool $partial_take_profit = true,      // Activer la prise de profit partielle
-        public float $max_investment_multiplier = 20.0, // Multiplicateur max de l'investissement initial
+        public float $buy_stop_loss_pct = 10.0,     // Stop loss initial en pourcentage
+        public float $max_buy_stop_loss_pct = 15.0,        // Stop loss en pourcentage
         public array $entry_indicators = [              // Indicateurs pour lentrée (option)
             'rsi_period' => 14,
             'rsi_oversold' => 40,
@@ -24,10 +22,10 @@ final readonly class DynamicPositionParameters
     public function toArray(): array
     {
         return [
-            'initial_stop_loss_pct' => $this->initial_stop_loss_pct,
-            'analysis_period' => $this->analysis_period,
-            'partial_take_profit' => $this->partial_take_profit,
-            'max_investment_multiplier' => $this->max_investment_multiplier,
+            'buy_stop_loss_pct' => $this->buy_stop_loss_pct,
+            'profit_stop_loss_pct' => $this->profit_stop_loss_pct,
+            'secure_stop_loss_pct' => $this->secure_stop_loss_pct,
+            'max_buy_stop_loss_pct' => $this->max_buy_stop_loss_pct,
             'entry_indicators' => $this->entry_indicators,
         ];
     }

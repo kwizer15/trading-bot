@@ -21,7 +21,7 @@ interface StrategyInterface extends BacktestableInterface
      * @param KlineHistory $history Données du marché (klines)
      * @return bool True si un signal de vente est détecté, sinon False
      */
-    public function shouldSell(KlineHistory $history): bool;
+    public function shouldSell(KlineHistory $history, Position $position): bool;
 
     /**
      * Obtient le nom de la stratégie
@@ -58,5 +58,7 @@ interface StrategyInterface extends BacktestableInterface
     public function onBuy(Position $position): void;
 
     public function getInvestment(string $symbol, float $currentPrice): ?float;
+
+    public function calculateStopLoss(string $symbol, float $currentPrice): ?float;
 
 }

@@ -1,7 +1,10 @@
 <?php
 
+use Kwizer15\TradingBot\Clock\RealClock;
 use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
+use Kwizer15\TradingBot\DTO\PositionList;
+use Kwizer15\TradingBot\Utils\Logger;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -367,6 +370,28 @@ switch ($action) {
                     ]);
                 }
                 break;
+
+    case 'sell_position':
+        $symbol = $_POST['symbol'] ?? null;
+        $clock = new RealClock();
+        $logger = new Logger($clock, dirname(__DIR__) . '/logs/trading.log');
+        $positionList = new PositionList(dirname(__DIR__) . '/data/positions.json', $logger, $clock);
+        if (!$positionList->hasPositionForSymbol($symbol)) {
+            send_json_response(['success' => false, 'message' => 'Pas de position trouvée pour le symbol ' . $symbol]);
+            break;
+        }
+
+        $position = $positionList->getPositionForSymbol($symbol);
+        try {
+            $api->sellMarket($symbol, $position->quantity);
+            $positionList->sell($symbol);
+            $logger->notice('Vente manuelle de '.$position->quantity.' '.$position->symbol.' effectuée');
+            send_json_response(['success' => true, 'message' => 'Position vendue avec succès']);
+        } catch (Exception $e) {
+            send_json_response(['success' => false, 'message' => $e->getMessage()]);
+        }
+
+        break;
 
     // Action non reconnue
     default:

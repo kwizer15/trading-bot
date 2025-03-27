@@ -16,6 +16,7 @@ final class Position
         public float $profit_loss_pct,
         public float $total_buy_fees,
         public float $total_sell_fees,
+        public ?float $stop_loss,
         public int $order_id
     ) {
         $this->total_sell_fees ??= 0;
@@ -36,12 +37,15 @@ final class Position
             $position['profit_loss_pct'],
             $position['total_buy_fees'],
             $position['total_sell_fees'],
+            $position['stop_loss'] ?? null,
             $position['order_id'],
         );
     }
 
-    public function update(float $currentPrice): self
+    public function update(float $currentPrice, ?float $stopLoss = null): self
     {
+        $currentValue = $this->quantity * $currentPrice;
+
         return new self(
             $this->symbol,
             $this->entry_price,
@@ -49,11 +53,12 @@ final class Position
             $this->timestamp,
             $this->cost,
             $currentPrice,
-            $this->quantity * $currentPrice,
-            $this->current_value - $this->cost,
-            ($this->current_value - $this->cost) / $this->cost * 100,
+            $currentValue,
+            $currentValue - $this->cost,
+            ($currentValue - $this->cost) / $this->cost * 100,
             $this->total_buy_fees,
             $this->total_sell_fees,
+            $stopLoss ?? $this->stop_loss,
             $this->order_id,
         );
     }
@@ -72,11 +77,12 @@ final class Position
             'profit_loss_pct' => $this->profit_loss_pct,
             'total_buy_fees' => $this->total_buy_fees,
             'total_sell_fees' => $this->total_sell_fees,
+            'stop_loss' => $this->stop_loss,
             'order_id' => $this->order_id,
         ];
     }
 
-    public function partialExit(float $quantityToSell, float $fees): self
+    public function partialExit(float $quantityToSell, float $fees, ?float $stopLoss = null): self
     {
         $remainingQuantity = $this->quantity - $quantityToSell;
         $remainingCost = $this->cost * ($remainingQuantity / $this->quantity);
@@ -97,11 +103,12 @@ final class Position
             ($profitLoss / $remainingCost) * 100,
             $this->total_buy_fees,
             $this->total_sell_fees + $fees,
+            $stopLoss ?? $this->stop_loss,
             $this->order_id,
         );
     }
 
-    public function increase(Order $order): Position
+    public function increase(Order $order, ?float $stopLoss = null): Position
     {
         $currentPrice = $order->price;
         $totalQuantity = $this->quantity + $order->quantity;
@@ -123,6 +130,7 @@ final class Position
             ($profitLoss / $cost) * 100,
             $this->total_buy_fees + $order->fee,
             $this->total_sell_fees,
+            $stopLoss ?? $this->stop_loss,
             $this->order_id,
         );
     }

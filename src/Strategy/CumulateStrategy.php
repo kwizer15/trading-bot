@@ -29,7 +29,7 @@ final readonly class CumulateStrategy implements StrategyInterface
         return true;
     }
 
-    public function shouldSell(KlineHistory $history): bool
+    public function shouldSell(KlineHistory $history, Position $position): bool
     {
         foreach ($this->strategies as $strategy) {
             if (!$strategy->shouldSell($history)) {
@@ -96,5 +96,10 @@ final readonly class CumulateStrategy implements StrategyInterface
     public function getInvestment(string $symbol, float $currentPrice): ?float
     {
         throw new \LogicException('Should not be called.');
+    }
+
+    public function calculateStopLoss(string $symbol, float $currentPrice): ?float
+    {
+        return null;
     }
 }

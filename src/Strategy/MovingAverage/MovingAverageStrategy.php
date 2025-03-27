@@ -78,8 +78,10 @@ final class MovingAverageStrategy implements StrategyInterface
     /**
      * Vérifie si un croisement baissier (Death Cross) s'est produit
      * (SMA courte croise en-dessous de SMA longue)
+     * @param KlineHistory $history
+     * @param Position $position
      */
-    public function shouldSell(KlineHistory $history): bool
+    public function shouldSell(KlineHistory $history, Position $position): bool
     {
         try {
             // Calculer la SMA courte et longue actuelles
@@ -153,5 +155,10 @@ final class MovingAverageStrategy implements StrategyInterface
     public function getMinimumKlines(): int
     {
         return $this->params['long_period'];
+    }
+
+    public function calculateStopLoss(string $symbol, float $currentPrice): ?float
+    {
+        return null;
     }
 }

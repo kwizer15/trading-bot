@@ -110,8 +110,9 @@ class BinanceAPI implements BinanceAPIInterface
         }
 
         $this->logger->debug('Nouvel ordre d’achat : ' . json_encode($order));
+        $price = $order['cummulativeQuoteQty'] / $order['executedQty'];
 
-        return new Order($order['orderId'], $order['price'], $order['executedQty'], 0, $order['transactTime']);
+        return new Order($order['orderId'], $price, $order['executedQty'], 0, $order['transactTime']);
     }
 
     /**
@@ -125,8 +126,9 @@ class BinanceAPI implements BinanceAPIInterface
         }
 
         $this->logger->debug('Nouvel ordre de vente : ' . json_encode($order));
+        $price = $order['cummulativeQuoteQty'] / $order['executedQty'];
 
-        return new Order($order['orderId'], $order['price'], $order['executedQty'], 0, $order['transactTime']);
+        return new Order($order['orderId'], $price, $order['executedQty'], 0, $order['transactTime']);
     }
 
     /**
@@ -146,6 +148,21 @@ class BinanceAPI implements BinanceAPIInterface
         }
 
         return (float) $result['price'];
+    }
+
+    public function getCurrentPrices(array $symbols): iterable
+    {
+        $endpoint = 'v3/ticker/price';
+        $param = '["' . implode('","', $symbols) . '"]';
+        $params = [
+            'symbols' => $param
+        ];
+
+        $results = $this->makeRequest($endpoint, $params, 'GET', false);
+        $prices = [];
+        foreach ($results as $result) {
+            yield $result['symbol'] => (float) $result['price'];
+        }
     }
 
     /**

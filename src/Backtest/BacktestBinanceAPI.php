@@ -60,4 +60,11 @@ final readonly class BacktestBinanceAPI implements BinanceAPIInterface
         return $this->klineHistory->last()->close;
     }
 
+    public function getCurrentPrices(array $symbols): iterable
+    {
+        foreach ($symbols as $symbol) {
+            yield $symbol => $this->klineHistory->last()->close;
+        }
+    }
+
 }

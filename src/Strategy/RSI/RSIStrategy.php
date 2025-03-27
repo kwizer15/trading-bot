@@ -93,7 +93,7 @@ final class RSIStrategy implements StrategyInterface
         }
     }
 
-    public function shouldSell(KlineHistory $history): bool
+    public function shouldSell(KlineHistory $history, Position $position): bool
     {
         try {
             // Calculer le RSI actuel
@@ -165,5 +165,10 @@ final class RSIStrategy implements StrategyInterface
     public function getMinimumKlines(): int
     {
         return $this->params['period'];
+    }
+
+    public function calculateStopLoss(string $symbol, float $currentPrice): ?float
+    {
+        return null;
     }
 }

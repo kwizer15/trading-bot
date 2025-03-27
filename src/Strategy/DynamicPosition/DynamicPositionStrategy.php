@@ -3,12 +3,10 @@
 namespace Kwizer15\TradingBot\Strategy\DynamicPosition;
 
 use Kwizer15\TradingBot\DTO\KlineHistory;
-use Kwizer15\TradingBot\DTO\Order;
 use Kwizer15\TradingBot\DTO\Position;
-use Kwizer15\TradingBot\Strategy\PositionAction;
-use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
+use Kwizer15\TradingBot\Strategy\StrategyInterface;
 
-final class DynamicPositionStrategy implements PositionActionStrategyInterface
+final class DynamicPositionStrategy implements StrategyInterface
 {
     private DynamicPositionParameters $parameters;
     // Stockage des positions avec leurs données
@@ -30,48 +28,39 @@ final class DynamicPositionStrategy implements PositionActionStrategyInterface
         // Vérifier si nous avons déjà eu une position sur ce symbole qui a été stoppée
 
         if (!isset($this->positionData[$pairSymbol])) {
-        // Vérifier si nous avons des conditions d'entrée spécifiques
-        if (empty($this->parameters->entry_indicators)) {
-            // Sans conditions spécifiques, on peut utiliser une règle simple
-            // comme une tendance haussière récente
-            return $this->detectUptrend($history);
+            // Vérifier si nous avons des conditions d'entrée spécifiques
+            if (empty($this->parameters->entry_indicators)) {
+                // Sans conditions spécifiques, on peut utiliser une règle simple
+                // comme une tendance haussière récente
+                return $this->detectUptrend($history);
+            }
+
+            // Sinon utiliser des indicateurs techniques
+            return $this->analyzeEntryIndicators($history);
         }
 
-        // Sinon utiliser des indicateurs techniques
-        return $this->analyzeEntryIndicators($history);
-        }
 
-
-    // Obtenir le prix actuel
-    $currentPrice = $history->last()->close;
+        // Obtenir le prix actuel
+        $currentPrice = $history->last()->close;
         $this->updateStopLoss($pairSymbol, $currentPrice);
-$lastExitPrice = $this->positionData[$pairSymbol]['new_buy_price']; // * (1 - ($this->params['initial_stop_loss_pct'] / 100));
+        $newBuyPrice = $this->positionData[$pairSymbol]['new_buy_price'] ?? 0; // * (1 - ($this->params['initial_stop_loss_pct'] / 100));
 
-    // Vérifier si le prix est inférieur au prix de sortie (condition de réentrée)
-        return $currentPrice >= $lastExitPrice;
+        $maxBuyPrice = $this->positionData[$pairSymbol]['last_exit_price'] * (1 + ($this->parameters->max_buy_stop_loss_pct / 100));
+
+        return $newBuyPrice <= $currentPrice && $currentPrice <= $maxBuyPrice;
     }
 
     /**
      * Analyse les données du marché et détermine si un signal de vente est présent
      */
-    public function shouldSell(KlineHistory $history): bool
-    {
-        return false;
-    }
-
-    /**
-     * Détermine l'action à effectuer sur une position
-     */
-    public function getPositionAction(KlineHistory $history, Position $position): PositionAction
+    public function shouldSell(KlineHistory $history, Position $position): bool
     {
         // Extraire les klines et le symbole
         $symbol = $position->symbol;
 
-        // Obtenir le timestamp actuel depuis les données de marché (pour le backtest)
-        $currentTime = $history->last()->closeTime;
 
         // Si nous n'avons pas de données pour cette position, l'initialiser
-        if (!isset($this->positionData[$symbol])) {
+        if (!isset($this->positionData[$symbol]['quantity'])) {
             $this->onBuy($position);
         }
 
@@ -88,56 +77,25 @@ $lastExitPrice = $this->positionData[$pairSymbol]['new_buy_price']; // * (1 - ($
             // Stop loss atteint
             $this->positionData[$symbol]['exit_reason'] = 'try_stop_loss';
             $this->savePositionData();
-            return PositionAction::SELL;
+
+            return true;
         }
 
-        // Vérifier si c'est le moment d'une analyse périodique
-        $lastAnalysisTime = $this->positionData[$symbol]['last_analysis_time'];
-        $analysisPeriodMs = $this->parameters->analysis_period * 3600 * 1000;
-
-        if ($currentTime - $lastAnalysisTime < $analysisPeriodMs) {
-            return PositionAction::HOLD;
-        }
-        // Mettre à jour le timestamp de la dernière analyse
-        $this->positionData[$symbol]['last_analysis_time'] = $currentTime;
         $this->savePositionData();
 
-        return PositionAction::HOLD;
+        return false;
     }
 
-    /**
-     * Met à jour le stop loss en fonction de la position actuelle
-     */
-    private function updateStopLoss(string $symbol, float $currentPrice = null): void
-    {
-        $currentPrice ??= $this->positionData[$symbol]['current_price'] ?? 0;
-        // Calculer le nouveau stop loss
-        if ($this->positionData[$symbol]['last_exit_price'] === 0) {
-        $avgEntryPrice = $this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity'];
-        $stopLossPct = $this->parameters->initial_stop_loss_pct;
-        $stopLossPrice1 = $currentPrice * (1 - ($this->parameters->profit_stop_loss_pct / 100));
-        $stopLossPrice2 = $avgEntryPrice * (1 - ($stopLossPct / 100));
-        // Mettre à jour les données de position
-        $newStopLossPrice = max($stopLossPrice1, $stopLossPrice2, $this->positionData[$symbol]['stop_loss_price']);
-        if ($newStopLossPrice !== $this->positionData[$symbol]['stop_loss_price']) {
-            echo "New stop loss price for $symbol: $newStopLossPrice - Entry price: $avgEntryPrice\n";
-        }
-        $this->positionData[$symbol]['stop_loss_price'] = $newStopLossPrice;
 
-            return;
+    public function calculateStopLoss(string $symbol, float $currentPrice): ?float
+    {
+        if (($this->positionData[$symbol]['exit_reason'] ?? 'stop_loss') === 'stop_loss') {
+            return $currentPrice * (1 - ($this->parameters->secure_stop_loss_pct / 100));
         }
-        $newBuyPrices = array_filter([
-            $this->positionData[$symbol]['last_exit_price'] * (1+ ($this->parameters->rebuy_stop_loss_pct / 100)),
-            $currentPrice * (1 + ($this->parameters->rebuy_stop_loss_pct / 100)),
-            $this->positionData[$symbol]['new_buy_price'],
-        ], function ($price) {
-            return $price > 0.0;
-        });
-        $min = min(...$newBuyPrices);
-        if ($min !== $this->positionData[$symbol]['new_buy_price']) {
-            echo "New buy price for $symbol: $min - Last exit price: {$this->positionData[$symbol]['last_exit_price']}\n";
-        }
-        $this->positionData[$symbol]['new_buy_price'] = $min;
+
+        $stopLossPrice1 = $currentPrice * (1 - ($this->parameters->profit_stop_loss_pct / 100));
+
+        return max($stopLossPrice1, $this->positionData[$symbol]['stop_loss_price']);
     }
 
     /**
@@ -159,7 +117,7 @@ $lastExitPrice = $this->positionData[$pairSymbol]['new_buy_price']; // * (1 - ($
             'total_quantity' => $position->quantity,
             'entry_time' => $position->timestamp,
             'last_analysis_time' => $position->timestamp,
-            'stop_loss_price' => $entryPrice * (1 - ($this->parameters->initial_stop_loss_pct / 100)),
+            'stop_loss_price' => $this->calculateStopLoss($symbol, $entryPrice),
             'partial_exits' => [],
             'additional_entries' => [],
             'last_exit_price' => 0,
@@ -171,6 +129,86 @@ $lastExitPrice = $this->positionData[$pairSymbol]['new_buy_price']; // * (1 - ($
         $this->savePositionData();
 
         echo 'Nouvelle position : ' . $symbol . ' - Quantité : ' . $position->quantity . ' - Prix d\'entrée : ' . $entryPrice . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
+    }
+
+    public function getName(): string
+    {
+        return 'DynamicPositionStrategy';
+    }
+
+    public function getDescription(): string
+    {
+        return 'Stratégie avec gestion dynamique des positions, arrêts ajustables et entrées/sorties partielles.';
+    }
+
+    public function setParameters(array $params): void
+    {
+        $this->parameters = new DynamicPositionParameters(...$params);
+    }
+
+    public function getParameters(): array
+    {
+        return $this->parameters->toArray();
+    }
+
+    public function getParameter(string $key, mixed $default = null): mixed
+    {
+        return $this->parameters->$key ?? $default;
+    }
+
+    public function onSell(string $symbol, float $currentPrice): void
+    {
+
+        $this->positionData[$symbol]['last_exit_price'] = $currentPrice;
+        switch ($this->positionData[$symbol]['exit_reason']) {
+            case 'try_stop_loss':
+                $this->positionData[$symbol]['exit_reason'] = 'stop_loss';
+                break;
+        }
+        $this->positionData[$symbol]['new_buy_price'] = $currentPrice * (1 + ($this->parameters->buy_stop_loss_pct / 100));
+
+        $this->savePositionData();
+        echo 'Vente position    : ' . $symbol . ' - Quantité : ' . $this->positionData[$symbol]['quantity'] . ' - Prix de vente  : ' . $currentPrice . ' - Stop rebuy: ' . $this->positionData[$symbol]['new_buy_price'] . PHP_EOL;
+    }
+
+    public function getInvestment(string $symbol, float $currentPrice): ?float
+    {
+        return null;
+
+    }
+
+    public function getMinimumKlines(): int
+    {
+        return max($this->parameters->entry_indicators['rsi_period'], $this->parameters->entry_indicators['macd_slow']);
+    }
+
+    /**
+     * Met à jour le stop loss en fonction de la position actuelle
+     */
+    private function updateStopLoss(string $symbol, float $currentPrice = null): void
+    {
+        $currentPrice ??= $this->positionData[$symbol]['current_price'] ?? 0;
+        // Calculer le nouveau stop loss
+        if ($this->positionData[$symbol]['last_exit_price'] === 0) {
+            $avgEntryPrice = $this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity'];
+            $stopLossPct = $this->parameters->buy_stop_loss_pct;
+            $stopLossPrice1 = $currentPrice * (1 - ($this->parameters->profit_stop_loss_pct / 100));
+            $stopLossPrice2 = $avgEntryPrice * (1 - ($stopLossPct / 100));
+            // Mettre à jour les données de position
+            $newStopLossPrice = max($stopLossPrice1, $stopLossPrice2, $this->positionData[$symbol]['stop_loss_price']);
+            $this->positionData[$symbol]['stop_loss_price'] = $newStopLossPrice;
+
+            return;
+        }
+        $newBuyPrices = array_filter([
+            $this->positionData[$symbol]['last_exit_price'] * (1 + ($this->parameters->max_buy_stop_loss_pct / 100)),
+            $currentPrice * (1 + ($this->parameters->max_buy_stop_loss_pct / 100)),
+            $this->positionData[$symbol]['new_buy_price'] ?? 0.0,
+        ], function ($price) {
+            return $price > 0.0;
+        });
+        $min = min($newBuyPrices);
+        $this->positionData[$symbol]['new_buy_price'] = $min;
     }
 
     /**
@@ -350,16 +388,18 @@ $lastExitPrice = $this->positionData[$pairSymbol]['new_buy_price']; // * (1 - ($
         $result = [];
 
         foreach ($macdLine as $i => $macd) {
-            if (isset($signalLine[$i - (count($macdLine) - count($signalLine))])) {
-                $signal = $signalLine[$i - (count($macdLine) - count($signalLine))];
-                $histogram = $macd - $signal;
-
-                $result[] = [
-                    'macd' => $macd,
-                    'signal' => $signal,
-                    'histogram' => $histogram
-                ];
+            $signal = $signalLine[$i - (\count($macdLine) - \count($signalLine))] ?? null;
+            if (null === $signal) {
+                continue;
             }
+
+            $histogram = $macd - $signal;
+
+            $result[] = [
+                'macd' => $macd,
+                'signal' => $signal,
+                'histogram' => $histogram
+            ];
         }
 
         return $result;
@@ -392,119 +432,8 @@ $lastExitPrice = $this->positionData[$pairSymbol]['new_buy_price']; // * (1 - ($
         return $ema;
     }
 
-    // Méthodes requises par l'interface
-
-    public function getName(): string
+    private function getPositionDataFile(): string
     {
-        return 'DynamicPositionStrategy';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Stratégie avec gestion dynamique des positions, arrêts ajustables et entrées/sorties partielles.';
-    }
-
-    public function setParameters(array $params): void
-    {
-        $this->parameters = new DynamicPositionParameters(...$params);
-    }
-
-    public function getParameters(): array
-    {
-        return $this->parameters->toArray();
-    }
-
-    public function getParameter(string $key, mixed $default = null): mixed
-    {
-        return $this->parameters->$key ?? $default;
-    }
-
-
-    public function calculateIncreasePercentage(KlineHistory $marketData, Position $position): float
-    {
-        $symbol = $position->symbol;
-        $currentPrice = $marketData->last()->close;
-        $investment = $this->positionData[$symbol]['total_investment'];
-        $equity = $currentPrice * $this->positionData[$symbol]['quantity'];
-
-        return abs((($equity - $investment) / $investment) * 100);
-    }
-
-    /**
-     * Calcule le pourcentage de la position à sortir lors d'une sortie partielle
-     * @param KlineHistory $marketData Données du marché (klines)
-     * @param Position $position Données de la position
-     * @return float Pourcentage à sortir
-     */
-    public function calculateExitPercentage(KlineHistory $marketData, Position $position): float
-    {
-        return 0;
-        $symbol = $position->symbol;
-        $currentPrice = $marketData->last()->close;
-        $investment = $this->positionData[$symbol]['total_investment'];
-        $equity = $currentPrice * $this->positionData[$symbol]['quantity'];
-
-        return (($equity - $investment) / $investment) * 100;
-        return ($this->positionData[$symbol]['total_investment'] - $this->positionData[$symbol]['initial_investment']) / ($this->positionData[$symbol]['initial_investment']) * 100;
-    }
-
-    public function onPartialExit(Position $position, Order $order): void
-    {
-        $symbol = $position->symbol;
-
-        $avgEntryPrice = $this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity'];
-        $this->positionData[$symbol]['quantity'] -= $order->quantity;
-        $this->positionData[$symbol]['total_investment'] -= $order->quantity * $avgEntryPrice;
-        $this->updateStopLoss($symbol);
-        $this->savePositionData();
-        echo 'Sortie partielle de la position : ' . $symbol . ' - Quantité : ' . $order->quantity . ' - Prix : ' . $order->price . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
-    }
-
-    public function onIncreasePosition(Position $position, Order $order): void
-    {
-        $symbol = $position->symbol;
-
-        $this->positionData[$symbol]['total_investment'] += $order->quantity * $order->price;
-        $this->positionData[$symbol]['quantity'] += $order->quantity;
-
-        $this->updateStopLoss($symbol);
-        $this->savePositionData();
-        echo 'Augmentation de la position : ' . $symbol . ' - Quantité : ' . $order->quantity . ' - Prix : ' . $order->price . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
-    }
-
-    public function onSell(string $symbol, float $currentPrice): void
-    {
-
-        $this->positionData[$symbol]['last_exit_price'] = $currentPrice;
-        switch ($this->positionData[$symbol]['exit_reason']) {
-            case 'try_stop_loss':
-                $this->positionData[$symbol]['exit_reason'] = 'stop_loss';
-                break;
-        }
-
-        $this->savePositionData();
-        echo 'Sortie de la position : ' . $symbol . ' - Prix : ' . $currentPrice . ' - Raison : ' . $this->positionData[$symbol]['exit_reason'] . PHP_EOL;
-    }
-
-    /**
-     * @return string
-     */
-    public function getPositionDataFile(): string
-    {
-        return dirname(__DIR__, 2) . '/data/strategy_position_data.json';
-    }
-
-    public function getInvestment(string $symbol, float $currentPrice): ?float
-    {
-                if (!isset($this->positionData[$symbol])) {
-        return null;
-                }
-
-                return $this->positionData[$symbol]['total_investment'];
-    }
-
-    public function getMinimumKlines(): int
-    {
-        return max($this->parameters->entry_indicators['rsi_period'], $this->parameters->entry_indicators['macd_slow']);
+        return dirname(__DIR__, 3) . '/data/strategy_position_data.json';
     }
 }

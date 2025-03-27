@@ -111,11 +111,11 @@
                                         </td>
                                         <td>
                                             <?php
-                                            if (isset($position['strategy_data']) && isset($position['strategy_data']['stop_loss_price'])) {
-                                                echo format_number($position['strategy_data']['stop_loss_price'], 2);
+                                            if (isset($position['stop_loss'])) {
+                                                echo format_number($position['stop_loss'], 6);
 
                                                 // Calculer le pourcentage par rapport au prix actuel
-                                                $stopLossPercent = (($position['current_price'] - $position['strategy_data']['stop_loss_price']) / $position['current_price']) * 100;
+                                                $stopLossPercent = (($position['current_price'] - $position['stop_loss']) / $position['current_price']) * 100;
                                                 echo '<br><small>' . format_percent($stopLossPercent) . ' du prix actuel</small>';
                                             } else {
                                                 echo '-';
@@ -202,10 +202,10 @@
                                 <?php foreach ($trade_history as $trade): ?>
                                     <tr data-symbol="<?php echo $trade['symbol']; ?>" data-result="<?php echo $trade['profit'] > 0 ? 'win' : 'loss'; ?>">
                                         <td>
-                                            <strong><?php echo date('d/m/Y', $trade['exit_time'] / 1000); ?></strong>
+                                            <strong><?php echo date('d/m/Y', (int) ($trade['exit_time'] / 1000)); ?></strong>
                                             <br>
                                             <small class="text-muted">
-                                                <?php echo date('H:i:s', $trade['exit_time'] / 1000); ?>
+                                                <?php echo date('H:i:s', (int) ($trade['exit_time'] / 1000)); ?>
                                             </small>
                                         </td>
                                         <td><?php echo $trade['symbol']; ?></td>

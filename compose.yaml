@@ -13,4 +13,4 @@ services:
     volumes:
       - ./web:/srv/web:cached
     ports:
-      - "80:80"
+      - "8040:80"

@@ -66,10 +66,11 @@ class PositionList
     public function increasePosition(
         string $symbol,
         Order $order,
+        ?float $stopLoss = null
     ): Position {
         $this->load();
 
-        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->increase($order);
+        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->increase($order, $stopLoss);
 
         $this->save();
 
@@ -78,11 +79,11 @@ class PositionList
         return $this->positions[$symbol];
     }
 
-    public function partialExit(string $symbol, float $quantityToSell, float $fees): Position
+    public function partialExit(string $symbol, float $quantityToSell, float $fees, ?float $stopLoss = null): Position
     {
         $this->load();
 
-        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->partialExit($quantityToSell, $fees);
+        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->partialExit($quantityToSell, $fees, $stopLoss);
 
         $this->save();
 
@@ -91,7 +92,7 @@ class PositionList
         return $this->positions[$symbol];
     }
 
-    public function buy(string $symbol, float $currentPrice, float $quantity, float $cost, int $orderId, float $fees): Position
+    public function buy(string $symbol, float $currentPrice, float $quantity, float $cost, int $orderId, float $fees, ?float $stopLoss = null): Position
     {
         $this->load();
 
@@ -107,6 +108,7 @@ class PositionList
             0,
             $fees,
             0,
+            $stopLoss,
             $orderId
         ));
 
@@ -150,11 +152,11 @@ class PositionList
         }
     }
 
-    public function updatePosition(string $symbol, float $currentPrice): Position
+    public function updatePosition(string $symbol, float $currentPrice, ?float $stopLoss = null): Position
     {
         $this->load();
 
-        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->update($currentPrice);
+        $this->positions[$symbol] = $this->getPositionForSymbol($symbol)->update($currentPrice, $stopLoss);
 
         $this->save();
 

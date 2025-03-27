@@ -19,7 +19,7 @@ function get_positions() {
  * Récupère l'historique des trades
  */
 function get_trade_history() {
-    $history_file = BOT_PATH . '/data/trade_history.json';
+    $history_file = dirname(__DIR__, 2) . '/data/trades.json';
 
     if (file_exists($history_file)) {
         $history = json_decode(file_get_contents($history_file), true);
