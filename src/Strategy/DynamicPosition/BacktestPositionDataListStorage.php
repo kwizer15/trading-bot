@@ -2,8 +2,9 @@
 
 namespace Kwizer15\TradingBot\Strategy\DynamicPosition;
 
-final readonly class BacktestPositionDataListStorage implements PositionDataListStorageInterface
+final class BacktestPositionDataListStorage implements PositionDataListStorageInterface
 {
+    private static PositionDataList $positionDataList;
 
     public function __construct(
         private DynamicPositionParameters $parameters
@@ -11,11 +12,13 @@ final readonly class BacktestPositionDataListStorage implements PositionDataList
 
     public function load(): PositionDataList
     {
-        return new PositionDataList($this->parameters);
+        self::$positionDataList ??= new PositionDataList($this->parameters);
+
+        return self::$positionDataList;
     }
 
     public function save(PositionDataList $positionDataList): void
     {
-        // Do nothing
+        self::$positionDataList = $positionDataList;
     }
 }

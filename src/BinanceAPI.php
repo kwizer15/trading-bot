@@ -8,6 +8,9 @@ use Kwizer15\TradingBot\DTO\Balance;
 use Kwizer15\TradingBot\DTO\Order;
 use Kwizer15\TradingBot\Utils\Logger;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\HttpClient\ResponseInterface;
 
 class BinanceAPI implements BinanceAPIInterface
 {
@@ -17,6 +20,8 @@ class BinanceAPI implements BinanceAPIInterface
     private string $baseUrl;
     private array $exchangeInfo;
     private LoggerInterface $logger;
+    private array $klinesResponses = [];
+    private array $clients = [];
 
     public function __construct(
         private readonly ApiConfiguration $apiConfig,
@@ -30,23 +35,18 @@ class BinanceAPI implements BinanceAPIInterface
      */
     public function getKlines(string $symbol, string $interval = '1h', int $limit = 100, ?int $startTime = null, ?int $endTime = null): array
     {
-        $endpoint = 'v3/klines';
-        $params = [
-            'symbol' => $symbol,
-            'interval' => $interval,
-            'limit' => $limit
-        ];
+        $this->prepareKlines($symbol, $interval, $limit, $startTime, $endTime);
 
-        // Ajouter startTime et endTime s'ils sont spécifiés
-        if ($startTime !== null) {
-            $params['startTime'] = $startTime;
+        foreach ($this->klinesResponses as $responseSymbol => $response) {
+            if ($symbol !== $responseSymbol) {
+                continue;
+            }
+
+            unset($this->klinesResponses[$symbol]);
+
+            return $this->handleResponse($response);
         }
-
-        if ($endTime !== null) {
-            $params['endTime'] = $endTime;
-        }
-
-        return $this->makeRequest($endpoint, $params, 'GET', false, self::BASE_URL);
+        throw new \Exception('Pas de klines pour la paire ' . $symbol);
     }
 
     /**
@@ -165,6 +165,72 @@ class BinanceAPI implements BinanceAPIInterface
         }
     }
 
+    public function prepareKlines(string $symbol, string $interval = '1h', int $limit = 100, ?int $startTime = null, ?int $endTime = null): void
+    {
+        if (($this->klinesResponses[$symbol] ?? null) instanceof ResponseInterface) {
+            return;
+        }
+
+        $endpoint = 'v3/klines';
+        $params = [
+            'symbol' => $symbol,
+            'interval' => $interval,
+            'limit' => $limit
+        ];
+
+        // Ajouter startTime et endTime s'ils sont spécifiés
+        if ($startTime !== null) {
+            $params['startTime'] = $startTime;
+        }
+
+        if ($endTime !== null) {
+            $params['endTime'] = $endTime;
+        }
+
+        $this->klinesResponses[$symbol] = $this->prepareRequest($endpoint, $params, 'GET', false, self::BASE_URL);
+    }
+
+    private function prepareRequest(string $endpoint, array $params = [], string $method = 'GET', bool $auth = false, ?string $baseUrl = null): ResponseInterface
+    {
+        $baseUrl ??= $this->baseUrl;
+        $client = $this->getClient($baseUrl);
+
+        if ($auth) {
+            $params['timestamp'] = $this->getTimestamp();
+            $signature = $this->generateSignature($params);
+            $params['signature'] = $signature;
+        }
+
+        $query = http_build_query($params);
+        $options = [];
+
+        if ($method === 'GET' && !empty($query)) {
+            $options['query'] = $params;
+        }
+
+        $options['headers'] = [
+            'Content-Type' => 'application/x-www-form-urlencoded',
+            'X-MBX-APIKEY' => $this->apiConfig->key,
+        ];
+
+        if ($method === 'POST') {
+            $options['body'] = $query;
+        } elseif ($method === 'DELETE') {
+            if (!empty($query)) {
+                $options['body'] = $query;
+            }
+        }
+
+        return $client->request($method, $endpoint, $options);
+    }
+
+    public function getClient(string $baseUrl): HttpClientInterface
+    {
+        $this->clients[$baseUrl] ??= HttpClient::createForBaseUri($baseUrl);
+
+        return $this->clients[$baseUrl];
+    }
+
     /**
      * Récupère tous les ordres ouverts
      */
@@ -231,7 +297,7 @@ class BinanceAPI implements BinanceAPIInterface
      * Récupère toutes les devises de base disponibles (USDT, BTC, ETH, etc.)
      * @return array Liste des devises de base disponibles
      */
-    public function getBaseCurrencies()
+    public function getBaseCurrencies(): array
     {
         $endpoint = 'v3/exchangeInfo';
         $result = $this->makeRequest($endpoint, [], 'GET', false);
@@ -257,55 +323,17 @@ class BinanceAPI implements BinanceAPIInterface
         return array_merge($priorityBaseCurrencies, $otherBaseCurrencies);
     }
 
-    /**
-     * Effectue une requête à l'API Binance
-     */
-    private function makeRequest($endpoint, array $params = [], $method = 'GET', $auth = false, $baseUrl = null): array
+    private function makeRequest(string $endpoint, array $params = [], string $method = 'GET', bool $auth = false, ?string $baseUrl = null): array
     {
-        $baseUrl ??= $this->baseUrl;
-        $url = $baseUrl . $endpoint;
+        $response = $this->prepareRequest($endpoint, $params, $method, $auth, $baseUrl);
 
-        if ($auth) {
-            $params['timestamp'] = $this->getTimestamp();
-            $signature = $this->generateSignature($params);
-            $params['signature'] = $signature;
-        }
+        return $this->handleResponse($response);
+    }
 
-        $query = http_build_query($params);
-
-        if ($method === 'GET' && !empty($query)) {
-            $url .= '?' . $query;
-        }
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-        $headers = ['Content-Type: application/x-www-form-urlencoded'];
-        $headers[] = 'X-MBX-APIKEY: ' . $this->apiConfig->key;
-
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-        if ($method === 'POST') {
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $query);
-        } elseif ($method === 'DELETE') {
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
-            if (!empty($query)) {
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $query);
-            }
-        }
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-        if (curl_errno($ch)) {
-            throw new \Exception('Erreur Curl: ' . curl_error($ch));
-        }
-
-        curl_close($ch);
-
-        $decodedResponse = json_decode($response, true);
+    private function handleResponse(ResponseInterface $response): array
+    {
+        $httpCode = $response->getStatusCode();
+        $decodedResponse = $response->toArray(false);
 
         if ($httpCode >= 400) {
             $errorMsg = isset($decodedResponse['msg']) ? $decodedResponse['msg'] : 'Erreur API inconnue';
@@ -318,7 +346,7 @@ class BinanceAPI implements BinanceAPIInterface
     /**
      * Génère une signature HMAC SHA256 pour authentifier les requêtes
      */
-    private function generateSignature($params)
+    private function generateSignature($params): string
     {
         $query = http_build_query($params);
         return hash_hmac('sha256', $query, $this->apiConfig->secret);

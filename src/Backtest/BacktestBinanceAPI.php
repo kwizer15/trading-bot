@@ -67,4 +67,9 @@ final readonly class BacktestBinanceAPI implements BinanceAPIInterface
         }
     }
 
+    public function prepareKlines(string $symbol, string $interval = '1h', int $limit = 100, ?int $startTime = null, ?int $endTime = null): void
+    {
+
+    }
+
 }

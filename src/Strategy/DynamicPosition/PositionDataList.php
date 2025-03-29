@@ -12,11 +12,6 @@ final class PositionDataList
     ) {
     }
 
-    public function hasPosition(string $pairSymbol): bool
-    {
-        return isset($this->positionData[$pairSymbol]);
-    }
-
     public function buy(Position $position): void
     {
         $symbol = $position->symbol;
@@ -46,11 +41,13 @@ final class PositionDataList
 
     public function sell(string $symbol, float $currentPrice): void
     {
+        $quantity = $this->positionData[$symbol]['quantity'];
         $this->positionData[$symbol]['open'] = false;
+        $this->positionData[$symbol]['quantity'] = 0;
         $this->positionData[$symbol]['last_exit_price'] = $currentPrice;
         $this->positionData[$symbol]['new_buy_price'] = $currentPrice * (1 + ($this->parameters->buy_stop_loss_pct / 100));
 
-        echo 'Vente position    : ' . $symbol . ' - Quantité : ' . $this->positionData[$symbol]['quantity'] . ' - Prix de vente  : ' . $currentPrice . ' - Stop rebuy: ' . $this->positionData[$symbol]['new_buy_price'] . PHP_EOL;
+        echo 'Vente position    : ' . $symbol . ' - Quantité : ' . $quantity . ' - Prix de vente  : ' . $currentPrice . ' - Stop rebuy: ' . $this->positionData[$symbol]['new_buy_price'] . PHP_EOL;
     }
 
     public function getPositionData(): array
@@ -60,7 +57,8 @@ final class PositionDataList
 
     public function update(string $symbol, Position $positionObject): void
     {
-        $this->positionData[$symbol]['open'] ??= ($this->positionData[$symbol]['quantity'] > 0.0);
+        $this->positionData[$symbol] ??= $this->initialize($symbol);
+        $this->positionData[$symbol]['open'] ??= (($this->positionData[$symbol]['quantity'] ?? 0.0) > 0.0);
         $this->positionData[$symbol]['current_price'] = $positionObject->current_price;
         $this->positionData[$symbol]['current_value'] = $positionObject->current_value;
 
@@ -73,8 +71,9 @@ final class PositionDataList
 
     public function updateMinimumBuyPrice(string $symbol, float $currentPrice): void
     {
+        $this->positionData[$symbol] ??= $this->initialize($symbol);
+        $this->positionData[$symbol]['open'] ??= (($this->positionData[$symbol]['quantity'] ?? 0.0) > 0.0);
         $this->positionData[$symbol]['last_exit_price'] ??= $currentPrice;
-        $this->positionData[$symbol]['open'] ??= ($this->positionData[$symbol]['quantity'] > 0.0);
         $this->positionData[$symbol]['new_buy_price'] = $this->calculateMinimumBuyPrice($symbol, $currentPrice);
     }
 
@@ -90,7 +89,7 @@ final class PositionDataList
 
     private function initialize(string $symbol): array
     {
-        $this->positionData[$symbol] ??= [
+        return [
             'open' => false,
             'symbol' => $symbol,
             'initial_entry_price' => null,
@@ -102,14 +101,12 @@ final class PositionDataList
             'total_quantity' => 0,
             'entry_time' => null,
             'last_analysis_time' => null,
-            'stop_loss_price' => 0,
+            'stop_loss_price' => null,
             'partial_exits' => [],
             'additional_entries' => [],
-            'last_exit_price' => 0,
+            'last_exit_price' => null,
             'new_buy_price' => 0,
         ];
-
-        return $this->positionData[$symbol];
     }
 
     public function calculateStopLoss(string $symbol, float $currentPrice): float
@@ -133,8 +130,8 @@ final class PositionDataList
         ], function ($price) {
             return $price > 0.0;
         });
-        return min($newBuyPrices);
 
+        return min($newBuyPrices);
     }
 
 

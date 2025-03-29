@@ -61,8 +61,8 @@
                                     <tr>
                                         <td><strong><?php echo $symbol; ?></strong></td>
                                         <td><?php echo date('d/m/Y H:i:s', $position['timestamp'] / 1000); ?></td>
-                                        <td><?php echo format_number($position['entry_price'], 2); ?></td>
-                                        <td><?php echo format_number($position['current_price'], 2); ?></td>
+                                        <td><?php echo format_number($position['entry_price'], 8); ?></td>
+                                        <td><?php echo format_number($position['current_price'], 8); ?></td>
                                         <td><?php echo format_number($position['quantity'], 5); ?></td>
                                         <td><?php echo format_currency($position['cost']); ?></td>
                                         <td><?php echo format_currency($position['current_value']); ?></td>
@@ -216,8 +216,8 @@
                                                 <span class="badge bg-danger">PERTE</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td><?php echo format_number($trade['entry_price'], 2); ?></td>
-                                        <td><?php echo format_number($trade['exit_price'], 2); ?></td>
+                                        <td><?php echo format_number($trade['entry_price'], 8); ?></td>
+                                        <td><?php echo format_number($trade['exit_price'], 8); ?></td>
                                         <td><?php echo format_number($trade['quantity'], 5); ?></td>
                                         <td><?php echo format_currency($trade['cost']); ?></td>
                                         <td><?php echo format_currency($trade['sale_value']); ?></td>

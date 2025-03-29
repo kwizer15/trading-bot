@@ -179,14 +179,14 @@ function is_bot_running() {
  * Formate un nombre avec séparateur de milliers et précision
  */
 function format_number($number, $decimals = 2) {
-    return number_format($number, $decimals, '.', ' ');
+    return number_format($number, $decimals, '.', ' ');
 }
 
 /**
  * Formate un montant en devise
  */
 function format_currency($amount, $currency = 'USDT', $decimals = 2) {
-    return format_number($amount, $decimals) . ' ' . $currency;
+    return format_number($amount, $decimals) . ' ' . $currency;
 }
 
 /**

@@ -61,4 +61,8 @@ interface StrategyInterface extends BacktestableInterface
 
     public function calculateStopLoss(string $symbol, float $currentPrice): ?float;
 
+    public function onPreCycle(): void;
+
+    public function onPostCycle(): void;
+
 }

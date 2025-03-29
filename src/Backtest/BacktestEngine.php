@@ -41,9 +41,7 @@ class BacktestEngine
 
         // Parcourir les données historiques
         $countData = $this->history->count();
-        //        $cyclesTimes = [];
         for ($i = $this->strategy->getMinimumKlines() + 1; $i < $countData; $i++) {
-            //            $cycleTime = microtime(true);
             $currentData = $this->history->slice($i + 1);
             $kline = $currentData->last();
             $tradingBot = $this->buildTradingBot($currentData);
@@ -64,10 +62,7 @@ class BacktestEngine
                 'balance' => $this->balance->free,
                 'price' => $this->history->first()->close,
             ];
-            //            $cyclesTimes[] = microtime(true) - $cycleTime;
         }
-
-        //        var_dump(max(...$cyclesTimes), min(...$cyclesTimes));
 
         $tradingBot = $this->buildTradingBot($this->history);
         foreach ($tradingBot->getPositions()->iterateSymbols() as $symbol) {

@@ -6,8 +6,6 @@ use Kwizer15\TradingBot\Clock\RealClock;
 use Kwizer15\TradingBot\Configuration\TradingConfiguration;
 use Kwizer15\TradingBot\DTO\KlineHistory;
 use Kwizer15\TradingBot\DTO\PositionList;
-use Kwizer15\TradingBot\Strategy\PositionAction;
-use Kwizer15\TradingBot\Strategy\PositionActionStrategyInterface;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
@@ -15,8 +13,6 @@ use Psr\Log\LoggerInterface;
 class TradingBot
 {
     private PositionList $positionList;
-    private ClockInterface $clock;
-
     private array $trades;
 
     public function __construct(
@@ -28,8 +24,8 @@ class TradingBot
         private readonly ?string $tradesFile = null,
         ?ClockInterface $clock = null
     ) {
-        $this->clock = $clock ?? new RealClock();
-        $this->positionList = new PositionList($this->positionsFile, $this->logger, $this->clock);
+        $clock ??= new RealClock();
+        $this->positionList = new PositionList($this->positionsFile, $this->logger, $clock);
         if (!is_readable($this->tradesFile)) {
             $this->trades = [];
         } else {
@@ -47,98 +43,21 @@ class TradingBot
      */
     public function run(): void
     {
+        $this->strategy->onPreCycle();
         $this->logger->info('Démarrage du bot de trading avec la stratégie: ' . $this->strategy->getName());
+
+        foreach ($this->tradingConfiguration->symbols as $symbol) {
+            $pairSymbol = $symbol . $this->tradingConfiguration->baseCurrency;
+            $this->binanceAPI->prepareKlines($pairSymbol, '1h', 100);
+        }
 
         $this->managePositions();
 
         // Chercher de nouvelles opportunités d'achat
         $this->findBuyOpportunities();
 
+        $this->strategy->onPostCycle();
         $this->logger->info('Cycle de trading terminé');
-    }
-
-    /**
-     * Augmente une position existante
-     * @param string $symbol Symbole de la paire
-     * @param float $additionalInvestment Montant supplémentaire à investir
-     */
-    public function increasePosition(string $symbol, float $additionalInvestment): void
-    {
-        if (!$this->strategy instanceof PositionActionStrategyInterface) {
-            throw new \InvalidArgumentException('La stratégie doit supporter les actions de position');
-        }
-
-        try {
-            // Vérifier si nous avons cette position
-            if (!$this->positionList->hasPositionForSymbol($symbol)) {
-                $this->logger->warning("Impossible d'augmenter la position, aucune position trouvée pour {$symbol}");
-                return;
-            }
-
-            // Vérifier le solde disponible
-            $balance = $this->binanceAPI->getBalance($this->tradingConfiguration->baseCurrency);
-
-            if ($balance->free < $additionalInvestment) {
-                $this->logger->warning("Solde insuffisant pour augmenter la position {$symbol}");
-                return;
-            }
-
-            $currentPrice = $this->binanceAPI->getCurrentPrice($symbol);
-            $additionalQuantity = $additionalInvestment / $currentPrice;
-            $order = $this->binanceAPI->buyMarket($symbol, $additionalQuantity);
-
-            $positionObject = $this->positionList->increasePosition($symbol, $order);
-            $this->strategy->onIncreasePosition($positionObject, $order);
-            $this->logger->notice("Position {$symbol} augmentée de {$additionalQuantity} {$symbol}");
-        } catch (\Exception $e) {
-            $this->logger->error("Erreur lors de l'augmentation de la position {$symbol}: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * Exécute une sortie partielle de position
-     *
-     * @param string $symbol Symbole de la paire
-     * @param float $exitPercentage Pourcentage de la position à vendre
-     *
-     * @return bool Succès de l'opération
-     */
-    public function partialExit(string $symbol, float $exitPercentage): void
-    {
-        if (!$this->strategy instanceof PositionActionStrategyInterface) {
-            throw new \InvalidArgumentException('La stratégie doit supporter les actions de position');
-        }
-
-        try {
-            // Vérifier si nous avons cette position
-            if (!$this->positionList->hasPositionForSymbol($symbol)) {
-                $this->logger->warning("Impossible de réaliser une sortie partielle, aucune position trouvée pour {$symbol}");
-                return;
-            }
-
-            $quantity = $this->positionList->getPositionQuantity($symbol);
-
-            // Calculer la quantité à vendre
-            $quantityToSell = $quantity * ($exitPercentage / 100);
-
-            // Arrondir la quantité selon les règles de Binance
-            $quantityToSell = floor($quantityToSell * 100000) / 100000;
-
-            // Vérifier que la quantité à vendre est suffisante
-            if ($quantityToSell <= 0) {
-                $this->logger->warning("Quantité de sortie trop faible pour {$symbol}");
-                return;
-            }
-
-            // Exécuter l'ordre de vente partielle
-            $order = $this->binanceAPI->sellMarket($symbol, $quantityToSell);
-
-            $positionObject = $this->positionList->partialExit($symbol, $order->quantity, $order->fee);
-            $this->strategy->onPartialExit($positionObject, $order);
-            $this->logger->notice("Sortie partielle de {$symbol} de {$order->quantity} {$symbol}");
-        } catch (\Exception $e) {
-            $this->logger->error("Erreur lors de la sortie partielle de {$symbol}: " . $e->getMessage());
-        }
     }
 
     /**
@@ -147,24 +66,18 @@ class TradingBot
      */
     private function managePositions(): void
     {
-        $symbols = [];
         foreach ($this->positionList->iterateSymbols() as $symbol) {
-            $symbols[] = $symbol;
-        }
-        $prices = $this->binanceAPI->getCurrentPrices($symbols);
-
-        foreach ($prices as $symbol => $currentPrice) {
-            $this->managePosition($symbol, $currentPrice);
+            $klines = $this->binanceAPI->getKlines($symbol, '1h', 100);
+            $dtoKlines = KlineHistory::create($symbol, $klines);
+            $this->managePosition($symbol, $dtoKlines->last()->close, $dtoKlines);
         }
     }
 
-    private function managePosition(string $symbol, float $currentPrice): void
+    private function managePosition(string $symbol, float $currentPrice, KlineHistory $dtoKlines): void
     {
         $this->logger->info("Vérification de la position: {$symbol}");
 
         try {
-            // Obtenir le prix actuel
-            //            $currentPrice = $this->binanceAPI->getCurrentPrice($symbol);
             $positionObject = $this->positionList->updatePosition($symbol, $currentPrice, $this->strategy->calculateStopLoss($symbol, $currentPrice));
 
             // Vérifier le stop loss général
@@ -181,42 +94,6 @@ class TradingBot
                 return;
             }
 
-            // Obtenir les données récentes du marché
-            $klines = $this->binanceAPI->getKlines($symbol, '1h', 100);
-            $dtoKlines = KlineHistory::create($symbol, $klines);
-
-            // Vérifier si la stratégie supporte les actions spéciales
-            if ($this->strategy instanceof PositionActionStrategyInterface) {
-                $action = $this->strategy->getPositionAction($dtoKlines, $positionObject);
-
-                switch ($action) {
-                    case PositionAction::SELL:
-                        $this->logger->notice("Signal de vente détecté pour {$symbol}");
-                        $this->sell($symbol);
-                        break;
-
-                    case PositionAction::INCREASE_POSITION:
-                        $percentIncrease = $this->strategy->calculateIncreasePercentage($dtoKlines, $positionObject);
-                        $additionalInvestment = $this->calculateAdditionalInvestment($percentIncrease);
-                        $this->logger->notice("Signal d'augmentation de position pour {$symbol}");
-                        $this->increasePosition($symbol, $additionalInvestment);
-                        break;
-
-                    case PositionAction::PARTIAL_EXIT:
-                        $exitPercentage = $this->strategy->calculateExitPercentage($dtoKlines, $positionObject);
-                        $this->logger->notice("Signal de sortie partielle pour {$symbol}");
-                        $this->partialExit($symbol, $exitPercentage);
-                        break;
-
-                    case PositionAction::HOLD:
-                    default:
-                        $this->logger->info("Position maintenue pour {$symbol} (P/L: {$positionObject->profit_loss_pct}%)");
-                        break;
-                }
-                return;
-            }
-
-            // Utiliser l'approche classique shouldSell
             if ($this->strategy->shouldSell($dtoKlines, $positionObject)) {
                 $this->logger->info("Signal de vente détecté pour {$symbol}");
                 $this->sell($symbol);
@@ -227,19 +104,6 @@ class TradingBot
         } catch (\Exception $e) {
             $this->logger->error("Erreur lors de la gestion de la position {$symbol}: " . $e->getMessage());
         }
-    }
-
-    /**
-     * Calcule le montant supplémentaire à investir pour une position existante
-     * @param float $percentIncrease Pourcentage supplémentaire à investir
-     * @return float Montant à investir
-     */
-    private function calculateAdditionalInvestment(float $percentIncrease = 50.0): float
-    {
-        // Par défaut, on augmente de 50% de l'investissement initial
-        $baseAmount = $this->tradingConfiguration->investmentPerTrade;
-
-        return $baseAmount * ($percentIncrease / 100);
     }
 
     /**
