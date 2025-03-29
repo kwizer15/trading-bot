@@ -167,7 +167,11 @@ class PositionList
     {
         $positionObject = $this->getPositionForSymbol($symbol);
 
-        return $positionObject->profit_loss_pct <= -$stopLossPercentage;
+        if ($positionObject->stop_loss === null) {
+            return $positionObject->profit_loss_pct <= -$stopLossPercentage;
+        }
+
+        return $positionObject->stop_loss >= $positionObject->current_price;
     }
 
     public function isTakeProfitTriggered(string $symbol, float $takeProfitPercentage): bool

@@ -5,10 +5,10 @@ namespace Kwizer15\TradingBot\Strategy\DynamicPosition;
 final readonly class DynamicPositionParameters
 {
     public function __construct(
-        public float $secure_stop_loss_pct = 10.0,        // Stop loss en pourcentage
+        public float $secure_stop_loss_pct = 8.0,        // Stop loss en pourcentage
         public float $profit_stop_loss_pct = 15.0,        // Stop loss en pourcentage
-        public float $buy_stop_loss_pct = 10.0,     // Stop loss initial en pourcentage
-        public float $max_buy_stop_loss_pct = 15.0,        // Stop loss en pourcentage
+        public float $buy_stop_loss_pct = 5.0,     // Stop loss initial en pourcentage
+        public float $max_buy_stop_loss_pct = 10.0,        // Stop loss en pourcentage
         public array $entry_indicators = [              // Indicateurs pour lentrée (option)
             'rsi_period' => 14,
             'rsi_oversold' => 40,

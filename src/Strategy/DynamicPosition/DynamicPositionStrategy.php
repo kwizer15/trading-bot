@@ -9,15 +9,18 @@ use Kwizer15\TradingBot\Strategy\StrategyInterface;
 final class DynamicPositionStrategy implements StrategyInterface
 {
     private DynamicPositionParameters $parameters;
-    // Stockage des positions avec leurs données
-    private array $positionData = [];
+    private PositionDataList $positionDataList;
+    private PositionDataListStorageInterface $positionDataListStorage;
 
     public function __construct(
         ?DynamicPositionParameters $parameters = null,
-        private readonly bool $isBacktest = false
+        private readonly bool $isBacktest = false,
     ) {
         $this->parameters = $parameters ?? new DynamicPositionParameters();
-        $this->loadPositionData();
+        $this->positionDataListStorage = $this->isBacktest
+            ? new BacktestPositionDataListStorage($this->parameters)
+            : new PositionDataListStorage($this->parameters);
+        $this->positionDataList = $this->positionDataListStorage->load();
     }
 
     /**
@@ -27,25 +30,23 @@ final class DynamicPositionStrategy implements StrategyInterface
     {
         // Vérifier si nous avons déjà eu une position sur ce symbole qui a été stoppée
 
-        if (!isset($this->positionData[$pairSymbol])) {
-            // Vérifier si nous avons des conditions d'entrée spécifiques
-            if (empty($this->parameters->entry_indicators)) {
-                // Sans conditions spécifiques, on peut utiliser une règle simple
-                // comme une tendance haussière récente
-                return $this->detectUptrend($history);
-            }
-
-            // Sinon utiliser des indicateurs techniques
-            return $this->analyzeEntryIndicators($history);
-        }
+//        if (!$this->positionDataList->hasPosition($pairSymbol)) {
+//            if (empty($this->parameters->entry_indicators)) {
+//                return $this->detectUptrend($history);
+//            }
+//
+//             Sinon utiliser des indicateurs techniques
+//            return $this->analyzeEntryIndicators($history);
+//        }
 
 
         // Obtenir le prix actuel
         $currentPrice = $history->last()->close;
-        $this->updateStopLoss($pairSymbol, $currentPrice);
-        $newBuyPrice = $this->positionData[$pairSymbol]['new_buy_price'] ?? 0; // * (1 - ($this->params['initial_stop_loss_pct'] / 100));
+        $this->positionDataList->updateMinimumBuyPrice($pairSymbol, $currentPrice);
+        $positionData = $this->positionDataList->getPosition($pairSymbol);
+        $newBuyPrice = $positionData['new_buy_price'] ?? 0; // * (1 - ($this->params['initial_stop_loss_pct'] / 100));
 
-        $maxBuyPrice = $this->positionData[$pairSymbol]['last_exit_price'] * (1 + ($this->parameters->max_buy_stop_loss_pct / 100));
+        $maxBuyPrice = $positionData['last_exit_price'] * (1 + ($this->parameters->max_buy_stop_loss_pct / 100));
 
         return $newBuyPrice <= $currentPrice && $currentPrice <= $maxBuyPrice;
     }
@@ -58,30 +59,22 @@ final class DynamicPositionStrategy implements StrategyInterface
         // Extraire les klines et le symbole
         $symbol = $position->symbol;
 
+        $this->positionDataList->update($symbol, $position);
 
-        // Si nous n'avons pas de données pour cette position, l'initialiser
-        if (!isset($this->positionData[$symbol]['quantity'])) {
-            $this->onBuy($position);
-        }
+        $this->positionDataListStorage->save($this->positionDataList);
 
-        // Mettre à jour les données de position
-        $this->updatePositionData($symbol, $position);
-
-        $this->updateStopLoss($symbol);
-
+        $var = $this->positionDataList->getPosition($symbol);
         // Vérifier le stop loss d'abord
-        $stopLossPrice = $this->positionData[$symbol]['stop_loss_price'];
+        $stopLossPrice = $var['stop_loss_price'];
         $currentPrice = $position->current_price;
 
         if ($currentPrice <= $stopLossPrice) {
-            // Stop loss atteint
-            $this->positionData[$symbol]['exit_reason'] = 'try_stop_loss';
-            $this->savePositionData();
+            $this->positionDataListStorage->save($this->positionDataList);
 
             return true;
         }
 
-        $this->savePositionData();
+        $this->positionDataListStorage->save($this->positionDataList);
 
         return false;
     }
@@ -89,13 +82,7 @@ final class DynamicPositionStrategy implements StrategyInterface
 
     public function calculateStopLoss(string $symbol, float $currentPrice): ?float
     {
-        if (($this->positionData[$symbol]['exit_reason'] ?? 'stop_loss') === 'stop_loss') {
-            return $currentPrice * (1 - ($this->parameters->secure_stop_loss_pct / 100));
-        }
-
-        $stopLossPrice1 = $currentPrice * (1 - ($this->parameters->profit_stop_loss_pct / 100));
-
-        return max($stopLossPrice1, $this->positionData[$symbol]['stop_loss_price']);
+        return $this->positionDataList->calculateStopLoss($symbol, $currentPrice);
     }
 
     /**
@@ -103,32 +90,9 @@ final class DynamicPositionStrategy implements StrategyInterface
      */
     public function onBuy(Position $position): void
     {
-        $symbol = $position->symbol;
-        $entryPrice = $position->entry_price;
-        $initialInvestment = $position->cost;
-        $this->positionData[$symbol] = [
-            'symbol' => $symbol,
-            'initial_entry_price' => $entryPrice,
-            'avg_entry_price' => $entryPrice,
-            'initial_investment' => $initialInvestment,
-            'total_investment' => $initialInvestment,
-            'initial_quantity' => $position->quantity,
-            'quantity' => $position->quantity,
-            'total_quantity' => $position->quantity,
-            'entry_time' => $position->timestamp,
-            'last_analysis_time' => $position->timestamp,
-            'stop_loss_price' => $this->calculateStopLoss($symbol, $entryPrice),
-            'partial_exits' => [],
-            'additional_entries' => [],
-            'last_exit_price' => 0,
-            'new_buy_price' => 0,
-            'exit_reason' => ''
-        ];
+        $this->positionDataList->buy($position);
+        $this->positionDataListStorage->save($this->positionDataList);
 
-        $this->updateStopLoss($symbol);
-        $this->savePositionData();
-
-        echo 'Nouvelle position : ' . $symbol . ' - Quantité : ' . $position->quantity . ' - Prix d\'entrée : ' . $entryPrice . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
     }
 
     public function getName(): string
@@ -158,17 +122,8 @@ final class DynamicPositionStrategy implements StrategyInterface
 
     public function onSell(string $symbol, float $currentPrice): void
     {
-
-        $this->positionData[$symbol]['last_exit_price'] = $currentPrice;
-        switch ($this->positionData[$symbol]['exit_reason']) {
-            case 'try_stop_loss':
-                $this->positionData[$symbol]['exit_reason'] = 'stop_loss';
-                break;
-        }
-        $this->positionData[$symbol]['new_buy_price'] = $currentPrice * (1 + ($this->parameters->buy_stop_loss_pct / 100));
-
-        $this->savePositionData();
-        echo 'Vente position    : ' . $symbol . ' - Quantité : ' . $this->positionData[$symbol]['quantity'] . ' - Prix de vente  : ' . $currentPrice . ' - Stop rebuy: ' . $this->positionData[$symbol]['new_buy_price'] . PHP_EOL;
+        $this->positionDataList->sell($symbol, $currentPrice);
+        $this->positionDataListStorage->save($this->positionDataList);
     }
 
     public function getInvestment(string $symbol, float $currentPrice): ?float
@@ -180,75 +135,6 @@ final class DynamicPositionStrategy implements StrategyInterface
     public function getMinimumKlines(): int
     {
         return max($this->parameters->entry_indicators['rsi_period'], $this->parameters->entry_indicators['macd_slow']);
-    }
-
-    /**
-     * Met à jour le stop loss en fonction de la position actuelle
-     */
-    private function updateStopLoss(string $symbol, float $currentPrice = null): void
-    {
-        $currentPrice ??= $this->positionData[$symbol]['current_price'] ?? 0;
-        // Calculer le nouveau stop loss
-        if ($this->positionData[$symbol]['last_exit_price'] === 0) {
-            $avgEntryPrice = $this->positionData[$symbol]['total_investment'] / $this->positionData[$symbol]['quantity'];
-            $stopLossPct = $this->parameters->buy_stop_loss_pct;
-            $stopLossPrice1 = $currentPrice * (1 - ($this->parameters->profit_stop_loss_pct / 100));
-            $stopLossPrice2 = $avgEntryPrice * (1 - ($stopLossPct / 100));
-            // Mettre à jour les données de position
-            $newStopLossPrice = max($stopLossPrice1, $stopLossPrice2, $this->positionData[$symbol]['stop_loss_price']);
-            $this->positionData[$symbol]['stop_loss_price'] = $newStopLossPrice;
-
-            return;
-        }
-        $newBuyPrices = array_filter([
-            $this->positionData[$symbol]['last_exit_price'] * (1 + ($this->parameters->max_buy_stop_loss_pct / 100)),
-            $currentPrice * (1 + ($this->parameters->max_buy_stop_loss_pct / 100)),
-            $this->positionData[$symbol]['new_buy_price'] ?? 0.0,
-        ], function ($price) {
-            return $price > 0.0;
-        });
-        $min = min($newBuyPrices);
-        $this->positionData[$symbol]['new_buy_price'] = $min;
-    }
-
-    /**
-     * Met à jour les données d'une position existante
-     */
-    private function updatePositionData(string $symbol, Position $positionObject): void
-    {
-        // Mettre à jour les valeurs actuelles
-        $this->positionData[$symbol]['current_price'] = $positionObject->current_price;
-        $this->positionData[$symbol]['current_value'] = $positionObject->current_value;
-
-        $this->savePositionData();
-    }
-
-    /**
-     * Sauvegarde les données de position dans un fichier
-     */
-    private function savePositionData(): void
-    {
-        if ($this->isBacktest) {
-            return;
-        }
-
-        $dataFile = $this->getPositionDataFile();
-        file_put_contents($dataFile, json_encode($this->positionData, JSON_PRETTY_PRINT));
-    }
-
-    /**
-     * Charge les données de position depuis un fichier
-     */
-    private function loadPositionData(): void
-    {
-        if ($this->isBacktest) {
-            return;
-        }
-        $dataFile = $this->getPositionDataFile();
-
-        if (file_exists($dataFile)) {
-            $this->positionData = json_decode(file_get_contents($dataFile), true);
-        }
     }
 
     /**

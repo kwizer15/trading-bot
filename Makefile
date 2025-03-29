@@ -12,7 +12,6 @@ fixcs: vendor/bin/php-cs-fixer
 	php vendor/bin/php-cs-fixer fix src
 .PHONY: fixcs
 
-
 up: compose.yaml
 	docker compose up --detach
 .PHONY: up

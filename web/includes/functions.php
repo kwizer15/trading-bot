@@ -8,8 +8,11 @@ function get_positions() {
     $positions_file = BOT_PATH . '/data/positions.json';
 
     if (file_exists($positions_file)) {
-        $positions = json_decode(file_get_contents($positions_file), true);
-        return $positions ?: [];
+        $positions = json_decode(file_get_contents($positions_file), true) ?: [];
+        uasort($positions, function($a, $b) {
+           return ($b['profit_loss_pct'] * 100) - ($a['profit_loss_pct'] * 100);
+        });
+        return $positions;
     }
 
     return [];
