@@ -15,6 +15,7 @@
         <?php
         // Calculer les statistiques
         use Kwizer15\TradingBot\BinanceAPI;
+        use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 
         $positions = get_positions();
         $trade_history = get_trade_history();
@@ -26,11 +27,11 @@
         // Récupérer le solde depuis Binance si possible
         try {
             $config = get_config();
-            $binanceAPI = new BinanceAPI($config);
+            $binanceAPI = new BinanceAPI(new ApiConfiguration($config));
 
             $base_currency = $config['trading']['base_currency'];
             $balance_data = $binanceAPI->getBalance($base_currency);
-            $balance = $balance_data['free'] + $balance_data['locked'];
+            $balance = $balance_data->free + $balance_data->locked;
         } catch (Exception $e) {
             // Utiliser une valeur par défaut
             $balance = $config['backtest']['initial_balance'];
@@ -126,6 +127,26 @@
             </div>
         </div>
 
+        <div class="card mt-3 d-none" id="dynamic-strategy-info">
+            <div class="card-header bg-light">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Fonctionnement de la Dynamic Position Strategy
+                </h6>
+            </div>
+            <div class="card-body">
+                <p class="small">Cette stratégie gère dynamiquement vos positions avec les caractéristiques suivantes :</p>
+                <ul class="small">
+                    <li><strong>Analyse périodique :</strong> Toutes les <span id="analysis-period">24</span> heures, chaque position est réévaluée</li>
+                    <li><strong>Profits partiels :</strong> En cas de hausse, une partie de la position (<span id="exit-percentage">30</span>%) peut être vendue</li>
+                    <li><strong>Augmentation progressive :</strong> En cas de baisse de <span id="increase-threshold">5</span>%, la position peut être augmentée</li>
+                    <li><strong>Stop-loss dynamique :</strong> Le stop-loss est recalculé après chaque modification</li>
+                </ul>
+                <div class="text-end">
+                    <button class="btn btn-sm btn-outline-secondary" id="hide-strategy-info">Masquer</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Performance -->
         <div class="col-xl-3 col-md-6 mb-4">
             <div class="card card-stats h-100 <?php echo $win_rate >= 50 ? 'card-profit' : 'card-loss'; ?>">
@@ -183,6 +204,7 @@
                                     <th>Symbole</th>
                                     <th>Prix d'entrée</th>
                                     <th>Prix actuel</th>
+                                    <th>Stop loss</th>
                                     <th>Quantité</th>
                                     <th>Valeur</th>
                                     <th>P/L</th>
@@ -199,8 +221,13 @@
                                                 <?php echo date('d/m/Y H:i', $position['timestamp'] / 1000); ?>
                                             </small>
                                         </td>
-                                        <td><?php echo format_number($position['entry_price'], 2); ?></td>
-                                        <td><?php echo format_number($position['current_price'], 2); ?></td>
+                                        <td><?php echo format_number($position['entry_price'], 6); ?></td>
+                                        <td><?php echo format_number($position['current_price'], 6); ?></td>
+                                        <td class="<?php echo get_value_class($position['stop_loss'] - $position['entry_price']); ?>">
+                                            <?php echo format_currency(($position['stop_loss'] - $position['entry_price']) * $position['quantity']); ?>
+                                            <br>
+                                            <small>(<?php echo format_number($position['stop_loss'], 6); ?>)</small>
+                                        </td>
                                         <td><?php echo format_number($position['quantity'], 5); ?></td>
                                         <td><?php echo format_currency($position['current_value']); ?></td>
                                         <td class="<?php echo get_value_class($position['profit_loss_pct']); ?>">
@@ -261,7 +288,7 @@
                                     ?>
                                     <tr>
                                         <td>
-                                            <?php echo date('d/m/Y H:i', $trade['exit_time'] / 1000); ?>
+                                            <?php echo date('d/m/Y H:i', (int) ($trade['exit_time'] / 1000)); ?>
                                             <br>
                                             <small class="text-muted">
                                                 Durée: <?php echo round($trade['duration'], 1); ?>h
@@ -275,9 +302,9 @@
                                                 <span class="badge bg-danger">PERTE</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td><?php echo format_number($trade['entry_price'], 2); ?></td>
-                                        <td><?php echo format_number($trade['exit_price'], 2); ?></td>
-                                        <td><?php echo format_number($trade['quantity'], 5); ?></td>
+                                        <td><?php echo format_number($trade['entry_price'], 8); ?></td>
+                                        <td><?php echo format_number($trade['exit_price'], 8); ?></td>
+                                        <td><?php echo format_number($trade['quantity'], 8); ?></td>
                                         <td class="<?php echo get_value_class($trade['profit']); ?>">
                                             <?php echo format_percent($trade['profit_pct']); ?>
                                             <br>
@@ -331,6 +358,34 @@
                     }
                 });
             }
+        });
+
+        $.ajax({
+            url: 'api.php',
+            data: { action: 'get_current_strategy' },
+            method: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                if (response.success && response.data) {
+                    const strategy = response.data;
+
+                    if (strategy.class === 'DynamicPositionStrategy') {
+                        $('#dynamic-strategy-info').removeClass('d-none');
+
+                        // Mettre à jour les valeurs
+                        if (strategy.parameters) {
+                            $('#analysis-period').text(strategy.parameters.analysis_period || 24);
+                            $('#exit-percentage').text(strategy.parameters.partial_exit_pct || 30);
+                            $('#increase-threshold').text(strategy.parameters.position_increase_pct || 5);
+                        }
+                    }
+                }
+            }
+        });
+
+        // Masquer l'info de stratégie
+        $('#hide-strategy-info').on('click', function() {
+            $('#dynamic-strategy-info').addClass('d-none');
         });
     });
 </script>

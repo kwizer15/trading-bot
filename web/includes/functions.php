@@ -8,8 +8,11 @@ function get_positions() {
     $positions_file = BOT_PATH . '/data/positions.json';
 
     if (file_exists($positions_file)) {
-        $positions = json_decode(file_get_contents($positions_file), true);
-        return $positions ?: [];
+        $positions = json_decode(file_get_contents($positions_file), true) ?: [];
+        uasort($positions, function($a, $b) {
+           return ($b['profit_loss_pct'] * 100) - ($a['profit_loss_pct'] * 100);
+        });
+        return $positions;
     }
 
     return [];
@@ -19,7 +22,7 @@ function get_positions() {
  * Récupère l'historique des trades
  */
 function get_trade_history() {
-    $history_file = BOT_PATH . '/data/trade_history.json';
+    $history_file = dirname(__DIR__, 2) . '/data/trades.json';
 
     if (file_exists($history_file)) {
         $history = json_decode(file_get_contents($history_file), true);
@@ -97,17 +100,14 @@ function get_strategies() {
 /**
  * Récupère les logs du bot
  */
-function get_logs($max_lines = null) {
+function get_logs($max_lines = null): iterable {
     $log_file = get_config('logging')['file'];
 
     if (!file_exists($log_file)) {
         return [];
     }
 
-    if ($max_lines === null) {
-        $max_lines = get_config('max_log_lines');
-    }
-
+    $max_lines ??= get_config('max_log_lines');
     $logs = [];
     $handle = fopen($log_file, 'r');
 
@@ -123,30 +123,25 @@ function get_logs($max_lines = null) {
             fgets($handle);
         }
 
-        $count = 0;
         while (($line = fgets($handle)) !== false) {
             // Parser la ligne de log
-            if (preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] (.+)$/', $line, $matches)) {
-                $logs[] = [
-                    'timestamp' => $matches[1],
-                    'level' => $matches[2],
-                    'message' => $matches[3]
-                ];
-
-                $count++;
-                if ($max_lines > 0 && $count >= $max_lines) {
-                    break;
-                }
+            if (!preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] (.+)$/', $line, $matches)) {
+                continue;
             }
+            $logs[] = [
+                'timestamp' => $matches[1],
+                'level' => $matches[2],
+                'message' => $matches[3]
+            ];
         }
 
         fclose($handle);
     }
 
-    // Trier par timestamp (plus récent en premier)
-    usort($logs, function($a, $b) {
-        return strtotime($b['timestamp']) - strtotime($a['timestamp']);
-    });
+    $count = $max_lines;
+    while ($count-- > 0 && $logs !== []) {
+        yield array_pop($logs);
+    }
 
     return $logs;
 }
@@ -184,14 +179,14 @@ function is_bot_running() {
  * Formate un nombre avec séparateur de milliers et précision
  */
 function format_number($number, $decimals = 2) {
-    return number_format($number, $decimals, '.', ' ');
+    return number_format($number, $decimals, '.', ' ');
 }
 
 /**
  * Formate un montant en devise
  */
 function format_currency($amount, $currency = 'USDT', $decimals = 2) {
-    return format_number($amount, $decimals) . ' ' . $currency;
+    return format_number($amount, $decimals) . ' ' . $currency;
 }
 
 /**

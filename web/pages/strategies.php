@@ -85,6 +85,46 @@
                                             </div>
                                         </div>
                                     </div>
+
+                                    <!-- Dynamic Position Strategy -->
+                                    <div class="col-md-6 mb-4">
+                                        <div class="card h-100">
+                                            <div class="card-header">
+                                                <h5 class="card-title mb-0">Dynamic Position Strategy</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <p>Cette stratégie gère dynamiquement les positions avec entrées/sorties partielles et ajustement automatique du stop-loss.</p>
+
+                                                <ul>
+                                                    <li><strong>Signal d'achat :</strong> Tendance haussière récente ou indicateurs techniques (RSI + MACD)</li>
+                                                    <li><strong>Gestion des positions :</strong> Analyse périodique pour ajuster la position en fonction de l'évolution du prix</li>
+                                                    <li><strong>Sortie partielle :</strong> Prend des profits partiels en cas de hausse</li>
+                                                    <li><strong>Augmentation :</strong> Augmente la position en cas de baisse jusqu'à un multiplicateur maximal</li>
+                                                    <li><strong>Stop-loss dynamique :</strong> Ajuste le stop-loss après chaque modification de position</li>
+                                                    <li><strong>Réentrée conditionnelle :</strong> Après un stop-loss, ne réentre que si le prix baisse sous le niveau de sortie</li>
+                                                </ul>
+
+                                                <h6 class="mt-3">Paramètres configurables :</h6>
+                                                <ul>
+                                                    <li><strong>Stop-Loss initial :</strong> Pourcentage de perte initial pour le stop-loss</li>
+                                                    <li><strong>Période d'analyse :</strong> Intervalle en heures entre chaque analyse de position</li>
+                                                    <li><strong>Prise de profit partielle :</strong> Activer/désactiver les sorties partielles</li>
+                                                    <li><strong>Seuil d'augmentation :</strong> Baisse en pourcentage pour déclencher l'augmentation</li>
+                                                    <li><strong>Multiplicateur maximal :</strong> Limite d'augmentation par rapport à l'investissement initial</li>
+                                                    <li><strong>Pourcentage de sortie :</strong> Pourcentage de la position à sortir lors d'un profit</li>
+                                                </ul>
+
+                                                <div class="mt-3">
+                                                    <button class="btn btn-primary configure-strategy-btn" data-strategy="DynamicPositionStrategy">
+                                                        Configurer
+                                                    </button>
+                                                    <button class="btn btn-success use-strategy-btn" data-strategy="DynamicPositionStrategy">
+                                                        Utiliser
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -327,6 +367,57 @@
                                 3: 'Low',
                                 4: 'Close'
                             }
+                        }
+                    },
+                    DynamicPositionStrategy: {
+                        initial_stop_loss_pct: {
+                            type: 'number',
+                            label: 'Stop-Loss initial (%)',
+                            default: 5.0,
+                            min: 0.5,
+                            max: 20.0,
+                            step: 0.5
+                        },
+                        analysis_period: {
+                            type: 'number',
+                            label: 'Période d\'analyse (heures)',
+                            default: 24,
+                            min: 1,
+                            max: 72,
+                            step: 1
+                        },
+                        partial_take_profit: {
+                            type: 'select',
+                            label: 'Prise de profit partielle',
+                            default: true,
+                            options: {
+                                true: 'Activé',
+                                false: 'Désactivé'
+                            }
+                        },
+                        position_increase_pct: {
+                            type: 'number',
+                            label: 'Seuil d\'augmentation (%)',
+                            default: 5.0,
+                            min: 1.0,
+                            max: 15.0,
+                            step: 0.5
+                        },
+                        max_investment_multiplier: {
+                            type: 'number',
+                            label: 'Multiplicateur maximal',
+                            default: 2.0,
+                            min: 1.1,
+                            max: 5.0,
+                            step: 0.1
+                        },
+                        partial_exit_pct: {
+                            type: 'number',
+                            label: 'Pourcentage de sortie (%)',
+                            default: 30.0,
+                            min: 5.0,
+                            max: 90.0,
+                            step: 5.0
                         }
                     }
                 };

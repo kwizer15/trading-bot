@@ -2,157 +2,146 @@
 
 namespace Kwizer15\TradingBot;
 
+use Kwizer15\TradingBot\Clock\RealClock;
+use Kwizer15\TradingBot\Configuration\TradingConfiguration;
+use Kwizer15\TradingBot\DTO\KlineHistory;
+use Kwizer15\TradingBot\DTO\PositionList;
 use Kwizer15\TradingBot\Strategy\StrategyInterface;
+use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 
-class TradingBot {
-    private $binanceAPI;
-    private $strategy;
-    private $config;
-    private $logger;
-    private $positions = [];
+class TradingBot
+{
+    private PositionList $positionList;
+    private array $trades;
 
-    public function __construct(BinanceAPI $binanceAPI, StrategyInterface $strategy, array $config, LoggerInterface $logger = null) {
-        $this->binanceAPI = $binanceAPI;
-        $this->strategy = $strategy;
-        $this->config = $config;
-        $this->logger = $logger;
+    public function __construct(
+        private readonly BinanceAPIInterface $binanceAPI,
+        private readonly StrategyInterface $strategy,
+        private readonly TradingConfiguration $tradingConfiguration,
+        private readonly LoggerInterface $logger,
+        private readonly ?string $positionsFile = null,
+        private readonly ?string $tradesFile = null,
+        ?ClockInterface $clock = null
+    ) {
+        $clock ??= new RealClock();
+        $this->positionList = new PositionList($this->positionsFile, $this->logger, $clock);
+        if (!is_readable($this->tradesFile)) {
+            $this->trades = [];
+        } else {
+            $tradeList = file_get_contents($this->tradesFile);
+            $this->trades = $tradeList ? json_decode($tradeList, true) : [];
+        }
     }
 
+    public function getPositions(): PositionList
+    {
+        return $this->positionList;
+    }
     /**
      * Lance le bot de trading
      */
-    public function run() {
-        $this->log('info', 'Démarrage du bot de trading avec la stratégie: ' . $this->strategy->getName());
+    public function run(): void
+    {
+        $this->strategy->onPreCycle();
+        $this->logger->info('Démarrage du bot de trading avec la stratégie: ' . $this->strategy->getName());
 
-        // Charger les positions actuelles
-        $this->loadPositions();
+        foreach ($this->tradingConfiguration->symbols as $symbol) {
+            $pairSymbol = $symbol . $this->tradingConfiguration->baseCurrency;
+            $this->binanceAPI->prepareKlines($pairSymbol, '1h', 100);
+        }
 
-        // Gérer les positions existantes (vérifier si on doit vendre)
         $this->managePositions();
 
         // Chercher de nouvelles opportunités d'achat
         $this->findBuyOpportunities();
 
-        $this->log('info', 'Cycle de trading terminé');
+        $this->strategy->onPostCycle();
+        $this->logger->info('Cycle de trading terminé');
     }
 
     /**
-     * Charge les positions actuelles depuis un fichier
+     * Gère les positions ouvertes avec support pour actions spéciales
+     * Cette méthode remplace ou complète la méthode managePositions() existante
      */
-    private function loadPositions() {
-        $positionsFile = __DIR__ . '/../data/positions.json';
-
-        if (file_exists($positionsFile)) {
-            $this->positions = json_decode(file_get_contents($positionsFile), true);
-            $this->log('info', 'Positions chargées: ' . count($this->positions));
-        } else {
-            $this->log('info', 'Aucune position existante trouvée');
+    private function managePositions(): void
+    {
+        foreach ($this->positionList->iterateSymbols() as $symbol) {
+            $klines = $this->binanceAPI->getKlines($symbol, '1h', 100);
+            $dtoKlines = KlineHistory::create($symbol, $klines);
+            $this->managePosition($symbol, $dtoKlines->last()->close, $dtoKlines);
         }
     }
 
-    /**
-     * Sauvegarde les positions actuelles dans un fichier
-     */
-    private function savePositions() {
-        $positionsFile = __DIR__ . '/../data/positions.json';
-        file_put_contents($positionsFile, json_encode($this->positions, JSON_PRETTY_PRINT));
-    }
+    private function managePosition(string $symbol, float $currentPrice, KlineHistory $dtoKlines): void
+    {
+        $this->logger->info("Vérification de la position: {$symbol}");
 
-    /**
-     * Gère les positions ouvertes (vérifie si on doit vendre)
-     */
-    private function managePositions() {
-        foreach ($this->positions as $symbol => $position) {
-            $this->log('info', "Vérification de la position: {$symbol}");
+        try {
+            $positionObject = $this->positionList->updatePosition($symbol, $currentPrice, $this->strategy->calculateStopLoss($symbol, $currentPrice));
 
-            try {
-                // Obtenir les données récentes du marché
-                $klines = $this->binanceAPI->getKlines($symbol, '1h', 100);
-
-                // Obtenir le prix actuel
-                $currentPrice = $this->binanceAPI->getCurrentPrice($symbol);
-
-                if (!$currentPrice) {
-                    $this->log('error', "Impossible d'obtenir le prix actuel pour {$symbol}");
-                    continue;
-                }
-
-                // Mettre à jour la position avec le prix actuel
-                $position['current_price'] = $currentPrice;
-                $position['current_value'] = $position['quantity'] * $currentPrice;
-                $position['profit_loss'] = $position['current_value'] - $position['cost'];
-                $position['profit_loss_pct'] = ($position['profit_loss'] / $position['cost']) * 100;
-
-                $this->positions[$symbol] = $position;
-
-                // Vérifier le stop loss
-                if ($position['profit_loss_pct'] <= -$this->config['trading']['stop_loss_percentage']) {
-                    $this->log('info', "Stop loss déclenché pour {$symbol} (perte: {$position['profit_loss_pct']}%)");
-                    $this->sell($symbol);
-                    continue;
-                }
-
-                // Vérifier le take profit
-                if ($position['profit_loss_pct'] >= $this->config['trading']['take_profit_percentage']) {
-                    $this->log('info', "Take profit déclenché pour {$symbol} (gain: {$position['profit_loss_pct']}%)");
-                    $this->sell($symbol);
-                    continue;
-                }
-
-                // Vérifier le signal de vente de la stratégie
-                if ($this->strategy->shouldSell($klines, $position)) {
-                    $this->log('info', "Signal de vente détecté pour {$symbol}");
-                    $this->sell($symbol);
-                    continue;
-                }
-
-                $this->log('info', "Position maintenue pour {$symbol} (P/L: {$position['profit_loss_pct']}%)");
-
-            } catch (\Exception $e) {
-                $this->log('error', "Erreur lors de la gestion de la position {$symbol}: " . $e->getMessage());
+            // Vérifier le stop loss général
+            if ($this->positionList->isStopLossTriggered($symbol, $this->tradingConfiguration->stopLossPercentage)) {
+                $this->logger->notice("Stop loss déclenché pour {$symbol} (perte: {$positionObject->profit_loss_pct}%)");
+                $this->sell($symbol);
+                return;
             }
-        }
 
-        // Sauvegarder les positions mises à jour
-        $this->savePositions();
+            // Vérifier le take profit général
+            if ($this->positionList->isTakeProfitTriggered($symbol, $this->tradingConfiguration->takeProfitPercentage)) {
+                $this->logger->notice("Take profit déclenché pour {$symbol} (gain: {$positionObject->profit_loss_pct}%)");
+                $this->sell($symbol);
+                return;
+            }
+
+            if ($this->strategy->shouldSell($dtoKlines, $positionObject)) {
+                $this->logger->info("Signal de vente détecté pour {$symbol}");
+                $this->sell($symbol);
+                return;
+            }
+
+            $this->logger->info("Position maintenue pour {$symbol} (P/L: {$positionObject->profit_loss_pct}%)");
+        } catch (\Exception $e) {
+            $this->logger->error("Erreur lors de la gestion de la position {$symbol}: " . $e->getMessage());
+        }
     }
 
     /**
      * Cherche de nouvelles opportunités d'achat
      */
-    private function findBuyOpportunities() {
+    private function findBuyOpportunities(): void
+    {
         // Vérifier si nous avons déjà atteint le nombre maximum de positions
-        if (count($this->positions) >= $this->config['trading']['max_open_positions']) {
-            $this->log('info', 'Nombre maximum de positions atteint, aucun nouvel achat possible');
+        if ($this->positionList->count() >= $this->tradingConfiguration->maxOpenPositions) {
+            $this->logger->info('Nombre maximum de positions atteint, aucun nouvel achat possible');
             return;
         }
 
         // Parcourir les symboles configurés
-        foreach ($this->config['trading']['symbols'] as $symbol) {
-            $pairSymbol = $symbol . $this->config['trading']['base_currency'];
+        foreach ($this->tradingConfiguration->symbols as $symbol) {
+            $pairSymbol = $symbol . $this->tradingConfiguration->baseCurrency;
 
             // Vérifier si nous avons déjà une position sur ce symbole
-            if (isset($this->positions[$pairSymbol])) {
+            if ($this->positionList->hasPositionForSymbol($pairSymbol)) {
                 continue;
             }
-
             try {
                 // Obtenir les données récentes du marché
                 $klines = $this->binanceAPI->getKlines($pairSymbol, '1h', 100);
+                $history = KlineHistory::create($pairSymbol, $klines);
 
                 // Vérifier le signal d'achat
-                if ($this->strategy->shouldBuy($klines)) {
-                    $this->log('info', "Signal d'achat détecté pour {$pairSymbol}");
-                    $this->buy($pairSymbol);
+                if ($this->strategy->shouldBuy($history, $pairSymbol)) {
+                    $this->logger->notice("Signal d'achat détecté pour {$pairSymbol}");
+                    $this->buy($pairSymbol, $this->strategy->getInvestment($pairSymbol, $history->last()->close));
 
                     // Si nous avons atteint le nombre maximum de positions après cet achat, on arrête
-                    if (count($this->positions) >= $this->config['trading']['max_open_positions']) {
+                    if ($this->positionList->count() >= $this->tradingConfiguration->maxOpenPositions) {
                         break;
                     }
                 }
             } catch (\Exception $e) {
-                $this->log('error', "Erreur lors de la recherche d'opportunités pour {$pairSymbol}: " . $e->getMessage());
+                $this->logger->error("Erreur lors de la recherche d'opportunités pour {$pairSymbol}: " . $e->getMessage());
             }
         }
     }
@@ -160,111 +149,104 @@ class TradingBot {
     /**
      * Exécute un achat
      */
-    private function buy($symbol) {
+    private function buy(string $symbol, float $investment = null): void
+    {
         try {
             // Vérifier le solde disponible
-            $balance = $this->binanceAPI->getBalance($this->config['trading']['base_currency']);
+            $balance = $this->binanceAPI->getBalance($this->tradingConfiguration->baseCurrency);
 
-            if ($balance['free'] < $this->config['trading']['investment_per_trade']) {
-                $this->log('warning', "Solde insuffisant pour acheter {$symbol}");
-                return false;
+            $cost = $investment ?? $this->tradingConfiguration->investmentPerTrade;
+            if ($balance->free < $cost) {
+                $this->logger->warning("Solde insuffisant pour acheter {$symbol}");
+                return;
             }
 
-            // Obtenir le prix actuel
             $currentPrice = $this->binanceAPI->getCurrentPrice($symbol);
-
-            if (!$currentPrice) {
-                $this->log('error', "Impossible d'obtenir le prix actuel pour {$symbol}");
-                return false;
-            }
-
-            // Calculer la quantité à acheter
-            $quantity = $this->config['trading']['investment_per_trade'] / $currentPrice;
-
-            // Arrondir la quantité selon les règles de Binance (à adapter selon les paires)
-            $quantity = floor($quantity * 100000) / 100000;
-
-            // Exécuter l'ordre d'achat
+            $quantity = $cost / $currentPrice;
             $order = $this->binanceAPI->buyMarket($symbol, $quantity);
 
-            if (!$order || !isset($order['orderId'])) {
-                $this->log('error', "Erreur lors de l'achat de {$symbol}: " . json_encode($order));
-                return false;
-            }
-
-            // Enregistrer la position
-            $this->positions[$symbol] = [
-                'symbol' => $symbol,
-                'entry_price' => $currentPrice,
-                'quantity' => $quantity,
-                'timestamp' => time() * 1000,
-                'cost' => $this->config['trading']['investment_per_trade'],
-                'current_price' => $currentPrice,
-                'current_value' => $quantity * $currentPrice,
-                'profit_loss' => 0,
-                'profit_loss_pct' => 0,
-                'order_id' => $order['orderId']
-            ];
-
-            // Sauvegarder les positions
-            $this->savePositions();
-
-            $this->log('info', "Achat réussi de {$quantity} {$symbol} au prix de {$currentPrice}");
-
-            return true;
-
+            $position = $this->positionList->buy(
+                $symbol,
+                $currentPrice,
+                $quantity,
+                $cost,
+                $order->orderId,
+                $order->fee,
+                $this->strategy->calculateStopLoss($symbol, $currentPrice)
+            );
+            $this->strategy->onBuy($position);
         } catch (\Exception $e) {
-            $this->log('error', "Erreur lors de l'achat de {$symbol}: " . $e->getMessage());
-            return false;
+            $this->logger->error("Erreur lors de l'achat de {$symbol}: " . $e->getMessage());
         }
+    }
+
+    public function closePosition(string $symbol): void
+    {
+        $this->strategy->onPreCycle();
+        $this->sell($symbol);
+        $this->strategy->onPostCycle();
     }
 
     /**
      * Exécute une vente
      */
-    private function sell($symbol) {
+    private function sell($symbol): void
+    {
         try {
             // Vérifier si nous avons cette position
-            if (!isset($this->positions[$symbol])) {
-                $this->log('warning', "Aucune position trouvée pour {$symbol}");
-                return false;
+            if (!$this->positionList->hasPositionForSymbol($symbol)) {
+                $this->logger->warning("Aucune position trouvée pour {$symbol}");
+                return;
             }
 
-            $position = $this->positions[$symbol];
+            $quantityToSell = $this->positionList->getPositionQuantity($symbol);
 
             // Exécuter l'ordre de vente
-            $order = $this->binanceAPI->sellMarket($symbol, $position['quantity']);
+            $order = $this->binanceAPI->sellMarket($symbol, $quantityToSell);
 
-            if (!$order || !isset($order['orderId'])) {
-                $this->log('error', "Erreur lors de la vente de {$symbol}: " . json_encode($order));
-                return false;
+            $positionObject = $this->positionList->getPositionForSymbol($symbol);
+            $saleValue = $order->price * $order->quantity;
+            $totalFee = $order->fee + $positionObject->total_buy_fees + $positionObject->total_sell_fees;
+            $profit = $saleValue - $positionObject->cost - $totalFee;
+            $profitPct = ($profit / $positionObject->cost) * 100;
+
+            $this->trades[] = [
+                'symbol' => $symbol,
+                'entry_price' => $positionObject->entry_price,
+                'exit_price' => $order->price,
+                'entry_time' => $positionObject->timestamp,
+                'exit_time' => $order->timestamp,
+                'quantity' => $order->quantity,
+                'cost' => $positionObject->cost,
+                'sale_value' => $saleValue,
+                'fees' => $totalFee,
+                'profit' => $profit,
+                'profit_pct' => $profitPct,
+                'duration' => ($order->timestamp - $positionObject->timestamp) / (60 * 60 * 1000) // Durée en heures
+            ];
+
+            $encodedTrades = json_encode($this->trades, JSON_PRETTY_PRINT);
+            $writeFileSuccess = file_put_contents($this->tradesFile, $encodedTrades);
+            if (false === $writeFileSuccess) {
+                $this->logger->error("Impossible de sauvegarder les trades.");
+            } else {
+                $this->logger->info("Trades sauvegardées.");
             }
 
-            // Journaliser la vente
-            $this->log('info', "Vente réussie de {$position['quantity']} {$symbol} au prix de {$position['current_price']} (P/L: {$position['profit_loss_pct']}%)");
+            $this->positionList->sell($symbol);
+            $this->strategy->onSell($symbol, $order->price);
 
-            // Supprimer la position
-            unset($this->positions[$symbol]);
-
-            // Sauvegarder les positions
-            $this->savePositions();
-
-            return true;
+            return;
 
         } catch (\Exception $e) {
-            $this->log('error', "Erreur lors de la vente de {$symbol}: " . $e->getMessage());
-            return false;
+            $this->logger->error("Erreur lors de la vente de {$symbol}: " . $e->getMessage());
+            return;
         }
     }
 
-    /**
-     * Journalise un message
-     */
-    private function log($level, $message) {
-        if ($this->logger) {
-            $this->logger->log($level, $message);
-        } else {
-            echo date('Y-m-d H:i:s') . " [{$level}] {$message}" . PHP_EOL;
-        }
+    public function getTrades(): array
+    {
+        return $this->trades;
     }
+
 }

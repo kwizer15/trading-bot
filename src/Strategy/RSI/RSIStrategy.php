@@ -1,8 +1,13 @@
 <?php
 
-namespace Kwizer15\TradingBot\Strategy;
+namespace Kwizer15\TradingBot\Strategy\RSI;
 
-class RSIStrategy implements StrategyInterface {
+use Kwizer15\TradingBot\DTO\KlineHistory;
+use Kwizer15\TradingBot\DTO\Position;
+use Kwizer15\TradingBot\Strategy\StrategyInterface;
+
+final class RSIStrategy implements StrategyInterface
+{
     private $params = [
         'period' => 14,           // Période pour le calcul du RSI
         'overbought' => 70,       // Niveau de surachat
@@ -13,8 +18,16 @@ class RSIStrategy implements StrategyInterface {
     /**
      * Calcule l'indice de force relative (RSI)
      */
-    private function calculateRSI(array $data, int $period, int $priceIndex): float {
-        $count = count($data);
+    private function calculateRSI(KlineHistory $history, int $period, int $priceIndex): float
+    {
+        $count = $history->count();
+
+        $priceIndexMap = [
+            1 => 'open',
+            2 => 'high',
+            3 => 'low',
+            4 => 'close',
+        ];
 
         if ($count < $period + 1) {
             throw new \Exception("Pas assez de données pour calculer le RSI de période {$period}");
@@ -23,10 +36,12 @@ class RSIStrategy implements StrategyInterface {
         $gains = 0;
         $losses = 0;
 
+        $priceName = $priceIndexMap[$priceIndex];
+
         // Calculer les gains et pertes sur la période
         for ($i = $count - $period; $i < $count; $i++) {
-            $currentPrice = floatval($data[$i][$priceIndex]);
-            $previousPrice = floatval($data[$i - 1][$priceIndex]);
+            $currentPrice = $history->get($i)->$priceName;
+            $previousPrice = $history->get($i - 1)->$priceName;
             $change = $currentPrice - $previousPrice;
 
             if ($change >= 0) {
@@ -52,21 +67,22 @@ class RSIStrategy implements StrategyInterface {
         return $rsi;
     }
 
-    public function shouldBuy(array $marketData): bool {
+    public function shouldBuy(KlineHistory $history, string $currentSymbol): bool
+    {
         try {
             // Calculer le RSI actuel
-            $currentRSI = $this->calculateRSI($marketData, $this->params['period'], $this->params['price_index']);
+            $currentRSI = $this->calculateRSI($history, $this->params['period'], $this->params['price_index']);
 
             // Si nous n'avons pas assez de données pour le calcul précédent, on ne peut pas détecter un croisement
-            if (count($marketData) <= $this->params['period'] + 1) {
+            if ($history->count() <= $this->params['period'] + 1) {
                 return false;
             }
 
             // Créer un ensemble de données sans la dernière bougie pour calculer le RSI précédent
-            $previousData = array_slice($marketData, 0, -1);
+            $dtoPreviousData = $history->slice(-1);
 
             // Calculer le RSI précédent
-            $previousRSI = $this->calculateRSI($previousData, $this->params['period'], $this->params['price_index']);
+            $previousRSI = $this->calculateRSI($dtoPreviousData, $this->params['period'], $this->params['price_index']);
 
             // Signal d'achat : RSI était en dessous du niveau de survente et remonte maintenant
             return ($previousRSI < $this->params['oversold']) && ($currentRSI > $this->params['oversold']);
@@ -77,21 +93,22 @@ class RSIStrategy implements StrategyInterface {
         }
     }
 
-    public function shouldSell(array $marketData, array $position): bool {
+    public function shouldSell(KlineHistory $history, Position $position): bool
+    {
         try {
             // Calculer le RSI actuel
-            $currentRSI = $this->calculateRSI($marketData, $this->params['period'], $this->params['price_index']);
+            $currentRSI = $this->calculateRSI($history, $this->params['period'], $this->params['price_index']);
 
             // Si nous n'avons pas assez de données pour le calcul précédent, on ne peut pas détecter un croisement
-            if (count($marketData) <= $this->params['period'] + 1) {
+            if ($history->count() <= $this->params['period'] + 1) {
                 return false;
             }
 
             // Créer un ensemble de données sans la dernière bougie pour calculer le RSI précédent
-            $previousData = array_slice($marketData, 0, -1);
+            $dtoPreviousData = $history->slice(-1);
 
             // Calculer le RSI précédent
-            $previousRSI = $this->calculateRSI($previousData, $this->params['period'], $this->params['price_index']);
+            $previousRSI = $this->calculateRSI($dtoPreviousData, $this->params['period'], $this->params['price_index']);
 
             // Signal de vente : RSI était au-dessus du niveau de surachat et redescend maintenant
             return ($previousRSI > $this->params['overbought']) && ($currentRSI < $this->params['overbought']);
@@ -102,17 +119,20 @@ class RSIStrategy implements StrategyInterface {
         }
     }
 
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'RSI Strategy';
     }
 
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Stratégie basée sur l\'indice de force relative (RSI). ' .
             'Achète lorsque le RSI sort d\'une zone de survente et ' .
             'vend lorsque le RSI sort d\'une zone de surachat.';
     }
 
-    public function setParameters(array $params): void {
+    public function setParameters(array $params): void
+    {
         foreach ($params as $key => $value) {
             if (array_key_exists($key, $this->params)) {
                 $this->params[$key] = $value;
@@ -120,7 +140,45 @@ class RSIStrategy implements StrategyInterface {
         }
     }
 
-    public function getParameters(): array {
+    public function getParameters(): array
+    {
         return $this->params;
+    }
+
+    public function getParameter(string $key, mixed $default = null): mixed
+    {
+        return $this->params[$key] ?? $default;
+    }
+    public function onSell(string $symbol, float $currentPrice): void
+    {
+    }
+
+    public function onBuy(Position $position): void
+    {
+    }
+
+    public function getInvestment(string $symbol, float $currentPrice): ?float
+    {
+        return null;
+    }
+
+    public function getMinimumKlines(): int
+    {
+        return $this->params['period'];
+    }
+
+    public function calculateStopLoss(string $symbol, float $currentPrice): ?float
+    {
+        return null;
+    }
+
+    public function onPreCycle(): void
+    {
+        // TODO: Implement onPreCycle() method.
+    }
+
+    public function onPostCycle(): void
+    {
+        // TODO: Implement onPostCycle() method.
     }
 }

@@ -50,6 +50,10 @@
                                     <th>Valeur actuelle</th>
                                     <th>P/L</th>
                                     <th>Actions</th>
+                                    <th>Entrée initiale</th>
+                                    <th>Entrées additionnelles</th>
+                                    <th>Sorties partielles</th>
+                                    <th>Stop-Loss actuel</th>
                                 </tr>
                                 </thead>
                                 <tbody>
@@ -57,8 +61,8 @@
                                     <tr>
                                         <td><strong><?php echo $symbol; ?></strong></td>
                                         <td><?php echo date('d/m/Y H:i:s', $position['timestamp'] / 1000); ?></td>
-                                        <td><?php echo format_number($position['entry_price'], 2); ?></td>
-                                        <td><?php echo format_number($position['current_price'], 2); ?></td>
+                                        <td><?php echo format_number($position['entry_price'], 8); ?></td>
+                                        <td><?php echo format_number($position['current_price'], 8); ?></td>
                                         <td><?php echo format_number($position['quantity'], 5); ?></td>
                                         <td><?php echo format_currency($position['cost']); ?></td>
                                         <td><?php echo format_currency($position['current_value']); ?></td>
@@ -71,6 +75,52 @@
                                             <button class="btn btn-sm btn-danger sell-btn" data-symbol="<?php echo $symbol; ?>">
                                                 Vendre
                                             </button>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            if (isset($position['strategy_data']) && $position['strategy_data']['initial_entry_price']) {
+                                                echo format_currency($position['strategy_data']['initial_investment']);
+                                            } else {
+                                                echo format_currency($position['cost']);
+                                            }
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            if (isset($position['strategy_data']) && !empty($position['strategy_data']['additional_entries'])) {
+                                                foreach ($position['strategy_data']['additional_entries'] as $entry) {
+                                                    echo date('d/m H:i', $entry['timestamp'] / 1000) . ': ';
+                                                    echo format_currency($entry['amount']) . '<br>';
+                                                }
+                                            } else {
+                                                echo '-';
+                                            }
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            if (isset($position['strategy_data']) && !empty($position['strategy_data']['partial_exits'])) {
+                                                foreach ($position['strategy_data']['partial_exits'] as $exit) {
+                                                    echo date('d/m H:i', $exit['timestamp'] / 1000) . ': ';
+                                                    echo format_currency($exit['amount']) . '<br>';
+                                                }
+                                            } else {
+                                                echo '-';
+                                            }
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            if (isset($position['stop_loss'])) {
+                                                echo format_number($position['stop_loss'], 6);
+
+                                                // Calculer le pourcentage par rapport au prix actuel
+                                                $stopLossPercent = (($position['current_price'] - $position['stop_loss']) / $position['current_price']) * 100;
+                                                echo '<br><small>' . format_percent($stopLossPercent) . ' du prix actuel</small>';
+                                            } else {
+                                                echo '-';
+                                            }
+                                            ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -152,10 +202,10 @@
                                 <?php foreach ($trade_history as $trade): ?>
                                     <tr data-symbol="<?php echo $trade['symbol']; ?>" data-result="<?php echo $trade['profit'] > 0 ? 'win' : 'loss'; ?>">
                                         <td>
-                                            <strong><?php echo date('d/m/Y', $trade['exit_time'] / 1000); ?></strong>
+                                            <strong><?php echo date('d/m/Y', (int) ($trade['exit_time'] / 1000)); ?></strong>
                                             <br>
                                             <small class="text-muted">
-                                                <?php echo date('H:i:s', $trade['exit_time'] / 1000); ?>
+                                                <?php echo date('H:i:s', (int) ($trade['exit_time'] / 1000)); ?>
                                             </small>
                                         </td>
                                         <td><?php echo $trade['symbol']; ?></td>
@@ -166,8 +216,8 @@
                                                 <span class="badge bg-danger">PERTE</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td><?php echo format_number($trade['entry_price'], 2); ?></td>
-                                        <td><?php echo format_number($trade['exit_price'], 2); ?></td>
+                                        <td><?php echo format_number($trade['entry_price'], 8); ?></td>
+                                        <td><?php echo format_number($trade['exit_price'], 8); ?></td>
                                         <td><?php echo format_number($trade['quantity'], 5); ?></td>
                                         <td><?php echo format_currency($trade['cost']); ?></td>
                                         <td><?php echo format_currency($trade['sale_value']); ?></td>

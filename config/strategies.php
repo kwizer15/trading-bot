@@ -45,6 +45,22 @@ return [
         ],
     ],
 
+    'dynamic_position_strategy' => [
+        'initial_stop_loss_pct' => 5.0,
+        'analysis_period' => 24,
+        'partial_take_profit' => true,
+        'position_increase_pct' => 5.0,
+        'max_investment_multiplier' => 2.0,
+        'partial_exit_pct' => 30.0,
+        'entry_indicators' => [
+            'rsi_period' => 14,
+            'rsi_oversold' => 40,
+            'macd_fast' => 12,
+            'macd_slow' => 26,
+            'macd_signal' => 9
+        ]
+    ],
+
     // Vous pouvez ajouter d'autres stratégies ici
     'bollinger_bands' => [
         'default' => [
