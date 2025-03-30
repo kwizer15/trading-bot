@@ -220,9 +220,9 @@ class BinanceAPI implements BinanceAPIInterface
     {
         $client = HttpClient::createForBaseUri($baseUrl);
 
-//        if ($client instanceof LoggerAwareInterface) {
-//            $client->setLogger(new Logger(new RealClock(), dirname(__DIR__).'/logs/http_client.log', 'debug'));
-//        }
+        //        if ($client instanceof LoggerAwareInterface) {
+        //            $client->setLogger(new Logger(new RealClock(), dirname(__DIR__).'/logs/http_client.log', 'debug'));
+        //        }
 
         return $client;
     }

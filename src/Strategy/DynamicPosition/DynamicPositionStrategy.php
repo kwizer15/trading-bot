@@ -15,8 +15,7 @@ final class DynamicPositionStrategy implements StrategyInterface
     public function __construct(
         ?DynamicPositionParameters $parameters = null,
         private readonly bool      $isBacktest = false,
-    )
-    {
+    ) {
         $this->parameters = $parameters ?? new DynamicPositionParameters();
         $this->positionDataListStorage = $this->isBacktest
             ? new BacktestPositionDataListStorage($this->parameters)

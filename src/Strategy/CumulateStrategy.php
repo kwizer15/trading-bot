@@ -102,4 +102,14 @@ final readonly class CumulateStrategy implements StrategyInterface
     {
         return null;
     }
+
+    public function onPreCycle(): void
+    {
+        // TODO: Implement onPreCycle() method.
+    }
+
+    public function onPostCycle(): void
+    {
+        // TODO: Implement onPostCycle() method.
+    }
 }

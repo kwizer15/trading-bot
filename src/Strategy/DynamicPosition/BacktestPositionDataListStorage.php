@@ -8,7 +8,8 @@ final class BacktestPositionDataListStorage implements PositionDataListStorageIn
 
     public function __construct(
         private DynamicPositionParameters $parameters
-    ) {}
+    ) {
+    }
 
     public function load(): PositionDataList
     {

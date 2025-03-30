@@ -6,7 +6,8 @@ final readonly class PositionDataListStorage implements PositionDataListStorageI
 {
     public function __construct(
         private DynamicPositionParameters $parameters
-    ) {}
+    ) {
+    }
 
     public function load(): PositionDataList
     {
