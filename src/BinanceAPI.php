@@ -150,21 +150,6 @@ class BinanceAPI implements BinanceAPIInterface
         return (float) $result['price'];
     }
 
-    public function getCurrentPrices(array $symbols): iterable
-    {
-        $endpoint = 'v3/ticker/price';
-        $param = '["' . implode('","', $symbols) . '"]';
-        $params = [
-            'symbols' => $param
-        ];
-
-        $results = $this->makeRequest($endpoint, $params, 'GET', false);
-        $prices = [];
-        foreach ($results as $result) {
-            yield $result['symbol'] => (float) $result['price'];
-        }
-    }
-
     public function prepareKlines(string $symbol, string $interval = '1h', int $limit = 100, ?int $startTime = null, ?int $endTime = null): void
     {
         if (($this->klinesResponses[$symbol] ?? null) instanceof ResponseInterface) {
@@ -226,9 +211,20 @@ class BinanceAPI implements BinanceAPIInterface
 
     public function getClient(string $baseUrl): HttpClientInterface
     {
-        $this->clients[$baseUrl] ??= HttpClient::createForBaseUri($baseUrl);
+        $this->clients[$baseUrl] ??= $this->buildClient($baseUrl);
 
         return $this->clients[$baseUrl];
+    }
+
+    private function buildClient(string $baseUrl): HttpClientInterface
+    {
+        $client = HttpClient::createForBaseUri($baseUrl);
+
+//        if ($client instanceof LoggerAwareInterface) {
+//            $client->setLogger(new Logger(new RealClock(), dirname(__DIR__).'/logs/http_client.log', 'debug'));
+//        }
+
+        return $client;
     }
 
     /**

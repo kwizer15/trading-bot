@@ -32,12 +32,5 @@ interface BinanceAPIInterface
      */
     public function getCurrentPrice($symbol): float;
 
-    /**
-     * @param array<string> $symbols
-     *
-     * @return iterable<string, float>
-     */
-    public function getCurrentPrices(array $symbols): iterable;
-
     public function prepareKlines(string $symbol, string $interval = '1h', int $limit = 100, ?int $startTime = null, ?int $endTime = null): void;
 }

@@ -182,7 +182,9 @@ class TradingBot
 
     public function closePosition(string $symbol): void
     {
+        $this->strategy->onPreCycle();
         $this->sell($symbol);
+        $this->strategy->onPostCycle();
     }
 
     /**

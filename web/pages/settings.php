@@ -138,7 +138,7 @@
                     <div class="col-md-6">
                         <label for="max-positions" class="form-label">Positions maximum</label>
                         <input type="number" class="form-control" id="max-positions" name="trading[max_open_positions]"
-                               value="<?php echo get_config('trading')['max_open_positions']; ?>" min="1" max="10" required>
+                               value="<?php echo get_config('trading')['max_open_positions']; ?>" min="1" required>
                         <div class="form-text">Nombre maximum de positions ouvertes simultanément</div>
                     </div>
                 </div>

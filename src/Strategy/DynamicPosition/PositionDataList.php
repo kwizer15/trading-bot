@@ -35,19 +35,14 @@ final class PositionDataList
             'last_exit_price' => 0,
             'new_buy_price' => 0,
         ];
-
-        echo 'Nouvelle position : ' . $symbol . ' - Quantité : ' . $position->quantity . ' - Prix d\'entrée : ' . $entryPrice . ' - Stop Loss : ' . $this->positionData[$symbol]['stop_loss_price'] . PHP_EOL;
     }
 
     public function sell(string $symbol, float $currentPrice): void
     {
-        $quantity = $this->positionData[$symbol]['quantity'];
         $this->positionData[$symbol]['open'] = false;
         $this->positionData[$symbol]['quantity'] = 0;
         $this->positionData[$symbol]['last_exit_price'] = $currentPrice;
         $this->positionData[$symbol]['new_buy_price'] = $currentPrice * (1 + ($this->parameters->buy_stop_loss_pct / 100));
-
-        echo 'Vente position    : ' . $symbol . ' - Quantité : ' . $quantity . ' - Prix de vente  : ' . $currentPrice . ' - Stop rebuy: ' . $this->positionData[$symbol]['new_buy_price'] . PHP_EOL;
     }
 
     public function getPositionData(): array
@@ -67,6 +62,7 @@ final class PositionDataList
             return;
         }
         $this->updateMinimumBuyPrice($symbol, $this->positionData[$symbol]['current_price']);
+
     }
 
     public function updateMinimumBuyPrice(string $symbol, float $currentPrice): void
@@ -123,6 +119,7 @@ final class PositionDataList
 
     private function calculateMinimumBuyPrice(string $symbol, float $currentPrice): float
     {
+
         $newBuyPrices = array_filter([
             $this->positionData[$symbol]['last_exit_price'] * (1 + ($this->parameters->max_buy_stop_loss_pct / 100)),
             $currentPrice * (1 + ($this->parameters->buy_stop_loss_pct / 100)),

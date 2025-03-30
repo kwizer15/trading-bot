@@ -80,13 +80,4 @@ final readonly class KlineHistory
     {
         return $this->last()->closeDate();
     }
-
-    public function listCloses(): array
-    {
-        $closes = [];
-        foreach ($this->data as $kline) {
-            $closes[] = $kline->close;
-        }
-        return $closes;
-    }
 }

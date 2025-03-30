@@ -28,6 +28,10 @@ final class DynamicPositionStrategy implements StrategyInterface
      */
     public function shouldBuy(KlineHistory $history, string $pairSymbol): bool
     {
+        if ($this->positionDataList->getPosition($pairSymbol)['open']) {
+            return false;
+        }
+
         $currentPrice = $history->last()->close;
         $this->positionDataList->updateMinimumBuyPrice($pairSymbol, $currentPrice);
         $positionData = $this->positionDataList->getPosition($pairSymbol);

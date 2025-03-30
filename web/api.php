@@ -4,6 +4,8 @@ use Kwizer15\TradingBot\Clock\RealClock;
 use Kwizer15\TradingBot\Configuration\ApiConfiguration;
 use Kwizer15\TradingBot\Configuration\BacktestConfiguration;
 use Kwizer15\TradingBot\DTO\PositionList;
+use Kwizer15\TradingBot\Strategy\StrategyFactory;
+use Kwizer15\TradingBot\TradingBot;
 use Kwizer15\TradingBot\Utils\Logger;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -372,22 +374,23 @@ switch ($action) {
                 break;
 
     case 'sell_position':
-        $symbol = $_POST['symbol'] ?? null;
+        ob_start();
+        $apiConfig = new Kwizer15\TradingBot\Configuration\ApiConfiguration($config);
+        $tradingConfig = new Kwizer15\TradingBot\Configuration\TradingConfiguration($config);
+        $strategyFactory = new StrategyFactory();
+        $strategy = $strategyFactory->create('DynamicPositionStrategy', [], true);
         $clock = new RealClock();
         $logger = new Logger($clock, dirname(__DIR__) . '/logs/trading.log');
-        $positionList = new PositionList(dirname(__DIR__) . '/data/positions.json', $logger, $clock);
-        if (!$positionList->hasPositionForSymbol($symbol)) {
-            send_json_response(['success' => false, 'message' => 'Pas de position trouvée pour le symbol ' . $symbol]);
-            break;
-        }
+        $tradingBot = new TradingBot($api, $strategy, $tradingConfig, $logger, dirname(__DIR__).'/data/positions.json', dirname(__DIR__).'/data/trades.json', $clock);
 
-        $position = $positionList->getPositionForSymbol($symbol);
+        $symbol = $_POST['symbol'] ?? null;
         try {
-            $api->sellMarket($symbol, $position->quantity);
-            $positionList->sell($symbol);
-            $logger->notice('Vente manuelle de '.$position->quantity.' '.$position->symbol.' effectuée');
+            $tradingBot->closePosition($symbol);
+            $logger->notice('Vente manuelle de '.$symbol.' effectuée');
+            ob_end_clean();
             send_json_response(['success' => true, 'message' => 'Position vendue avec succès']);
         } catch (Exception $e) {
+            ob_end_clean();
             send_json_response(['success' => false, 'message' => $e->getMessage()]);
         }
 
